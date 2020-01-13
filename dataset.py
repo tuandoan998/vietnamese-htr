@@ -1,3 +1,8 @@
+'''
+ERROR: FileNotFoundError: [Errno 2] No such file or directory: './data/RIMES/trainingsnippets_icdar/training_WR/lot_1/00001_L/00001_L_0_0.tiff
+'''
+
+
 import os
 import torch
 import pandas as pd
@@ -7,31 +12,34 @@ SOS_CHAR = '<start>' # start of sequence character
 EOS_CHAR = '<end>' # end of sequence character
 PAD_CHAR = '<pad>' # padding character
 
-alphabets = pd.read_csv('./data/VNOnDB/all_word.csv', sep='\t', keep_default_na=False, index_col=0)
-alphabets = sorted(list(set.union(*alphabets.label.apply(set))) + [SOS_CHAR, EOS_CHAR, PAD_CHAR])
+with open ('./data/RIMES/groundtruth_training_icdar2011.txt') as f:
+    content = f.readlines()
+alphabets = sorted(list(set(''.join([x.strip().split(' ')[-1] for x in content])))+[SOS_CHAR, EOS_CHAR, PAD_CHAR])
 
 char2int = dict((c, i) for i, c in enumerate(alphabets))
 int2char = dict((i, c) for i, c in enumerate(alphabets))
 vocab_size = len(alphabets)
 
 
-class VNOnDB(torch.utils.data.Dataset):
-    def __init__(self, image_folder, csv, image_transform=None):
-        self.df = pd.read_csv(csv, sep='\t', keep_default_na=False, index_col=0)
+class RIMES(torch.utils.data.Dataset):
+    def __init__(self, image_folder, groundtruth_txt, image_transform=None):
+        with open (groundtruth_txt, encoding='utf-8-sig') as f:
+            content = f.readlines()
+        self.content = [x.strip() for x in content]
         self.image_folder = image_folder
         self.image_transform = image_transform
 
     def __len__(self):
-        return len(self.df)
+        return len(self.content)
     
     def __getitem__(self, idx):
-        image_path = os.path.join(self.image_folder, self.df['id'][idx]+'.png')
+        image_path = os.path.join(self.image_folder, self.content[idx].split(' ')[0])
         image = Image.open(image_path)
         
         if self.image_transform:
             image = self.image_transform(image)
         
-        label = self.df['label'][idx]
+        label = self.content[idx].split(' ')[1]
         label = [SOS_CHAR] + list(label) + [EOS_CHAR]
             
         return image, label
@@ -41,11 +49,11 @@ def get_dataset(dataset, transform):
         raise ValueError('Should be: ' + str(['train', 'test', 'val']))
 
     if dataset == 'test':
-        return VNOnDB('./data/VNOnDB/word_test', './data/VNOnDB/test_word.csv', transform)
+        return RIMES('./data/RIMES/data_test', './data/RIMES/grount_truth_test_icdar2011.txt', transform)
     if dataset == 'train':
-        return VNOnDB('./data/VNOnDB/word_train', './data/VNOnDB/train_word.csv', transform)
+        return RIMES('./data/RIMES/trainingsnippets_icdar/training_WR', './data/RIMES/groundtruth_training_icdar2011.txt', transform)
     if dataset == 'val':
-        return VNOnDB('./data/VNOnDB/word_val', './data/VNOnDB/validation_word.csv', transform)
+        return RIMES('./data/RIMES/validationsnippets_icdar/testdataset_ICDAR', './data/RIMES/ground_truth_validation_icdar2011.txt', transform)
     
 def collate_fn(samples):
     '''
