@@ -31,26 +31,27 @@ class TransformerModel(nn.Module):
         tgt_key_padding_mask = (targets == PAD_CHAR_int).squeeze(-1).transpose(0,1).to(targets.device) # [B,T]
         
         outputs = self.transformer.forward(targets_onehot, img_features,
-                                           tgt_mask=None,
-                                           tgt_key_padding_mask=None)
+                                           tgt_mask=tgt_mask,
+                                           tgt_key_padding_mask=tgt_key_padding_mask)
         # [T, N, d_model]
         outputs = self.linear_output(outputs) # [T, N, vocab_size]
         return outputs
     
-    def inference(self, img_features, start_input, max_length=10):
+    def inference(self, img_features, start_input, output_weight=False, max_length=10):
         img_features = self.linear_img(img_features)
         # Optional: PositionEncoding for imgs
         # here ...
         
         outputs = start_input
         
-        for t in range(max_length):
-            transformer_input = self.linear_text(outputs)
-            transformer_input = self.positional_encoding_text(transformer_input)
-            output = self.transformer.forward(transformer_input, img_features,
-                                              tgt_mask=None, memory_mask=None,
-                                              tgt_key_padding_mask=None,
-                                              memory_key_padding_mask=None)
+        for t in range(1, max_length):
+            transformer_input = self.positional_encoding_text(outputs)
+            transformer_input = self.linear_text(transformer_input)
+            tgt_mask = nn.modules.Transformer.generate_square_subsequent_mask(None, t).to(start_input.device) # ignore SOS_CHAR
+            output, weights = self.transformer.forward(transformer_input, img_features,
+                                                       tgt_mask=tgt_mask,
+                                                       tgt_key_padding_mask=None,
+                                                       output_weight=output_weight)
             output = self.linear_output(output[[-1]])
             output = F.softmax(output, -1)
             _, index = output.topk(1, -1)
@@ -58,7 +59,7 @@ class TransformerModel(nn.Module):
             predict[:,:,index] = 1
             outputs = torch.cat([outputs, predict], dim=0)
 
-        return outputs
+        return outputs, weights
 
 class PositionalEncoding(nn.Module):
 
@@ -86,15 +87,20 @@ class TransformerDecoder(nn.Module):
         self.norm = nn.LayerNorm(attn_size)
 
     def forward(self, tgt, image_features, tgt_mask=None,
-                tgt_key_padding_mask=None):
+                tgt_key_padding_mask=None, output_weight=False):
 
         output = tgt
+        weights = []
         for i in range(self.num_layers):
-            output = self.layers[i](output, image_features, tgt_mask=tgt_mask,
+            output, weight = self.layers[i](output, image_features, tgt_mask=tgt_mask,
                                     tgt_key_padding_mask=tgt_key_padding_mask)
+            weights.append(weight)
         output = self.norm(output)
 
-        return output
+        if output_weight:
+            return output, weights
+        else:
+            return output, None
 
 class TransformerDecoderLayer(nn.Module):
     def __init__(self, attn_size, nhead, dim_feedforward=2048, dropout=0.1):
@@ -120,13 +126,13 @@ class TransformerDecoderLayer(nn.Module):
                               key_padding_mask=tgt_key_padding_mask)[0]
         tgt = tgt + self.dropout1(tgt2)
         tgt = self.norm1(tgt)
-        tgt2 = self.multihead_attn(tgt, image_features, image_features, attn_mask=None)[0] # TODO: get weights here
+        tgt2, weight = self.multihead_attn(tgt, image_features, image_features, attn_mask=None)
         tgt = tgt + self.dropout2(tgt2)
         tgt = self.norm2(tgt)
         tgt2 = self.linear2(self.dropout(F.relu(self.linear1(tgt))))
         tgt = tgt + self.dropout3(tgt2)
         tgt = self.norm3(tgt)
-        return tgt
+        return tgt, weight
 
 
 def _get_clones(module, N):
