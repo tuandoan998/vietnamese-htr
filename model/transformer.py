@@ -4,41 +4,51 @@ import torch.nn.functional as F
 import copy
 import math
 
+from .attention import Attention
+
+
 class TransformerModel(nn.Module):
     def __init__(self, cnn_features, vocab_size, attn_size):
         super().__init__()
 
-        decoder_layer = TransformerDecoderLayer(attn_size, nhead=1)
-        self.transformer = TransformerDecoder(attn_size, decoder_layer, num_layers=1)
+        encoder_layer = TransformerEncoderLayer(cnn_features, nhead=1)
+        self.encoder = TransformerEncoder(cnn_features, encoder_layer)
+
+        decoder_layer = TransformerDecoderLayer(cnn_features, vocab_size, attn_size, nhead=1)
+        self.decoder = TransformerDecoder(attn_size, decoder_layer)
+        # self.transformer = TransformerDecoder(attn_size, decoder_layer, num_layers=1)
         
-        self.linear_img = nn.Linear(cnn_features, attn_size)
-        self.linear_text = nn.Linear(vocab_size, attn_size)
-        
-        self.linear_output = nn.Linear(attn_size, vocab_size)
+        # self.encoder_attn = Attention(cnn_features, cnn_features, cnn_features)
+        self.character_distribution = nn.Linear(cnn_features, vocab_size)
         self.vocab_size = vocab_size
         
         self.positional_encoding_text = PositionalEncoding(vocab_size)
     
-    def forward(self, img_features, targets_onehot, targets, targets_length, PAD_CHAR_int):
-        img_features = self.linear_img(img_features)
+    def forward(self, img_features, targets_onehot, start_input, output_weight=False):
+        max_length = targets_onehot.size(0)
+
+        # img_features = self.encoder.forward(img_features)
         # Optional: PositionEncoding for imgs
         # here ...
         
-        targets_onehot = self.positional_encoding_text(targets_onehot.float())
-        targets_onehot = self.linear_text(targets_onehot)
+        # targets_onehot = self.positional_encoding_text(targets_onehot.float())
+        # targets_onehot = self.linear_text(targets_onehot)
+
+        outputs = start_input.float()
+
+        for t in range(0, max_length):
+            # transformer_input = self.positional_encoding_text(outputs)
+            # transformer_input = self.linear_text(transformer_input)
+            output, weights = self.decoder.forward(outputs, img_features,
+                                                   output_weight=output_weight)
+            output = self.character_distribution(output)
+            outputs = torch.cat([outputs, output], dim=0)
+
+        return outputs[1:], weights
         
-        tgt_mask = nn.modules.Transformer.generate_square_subsequent_mask(None, torch.max(targets_length)).to(targets.device) # ignore SOS_CHAR
-        tgt_key_padding_mask = (targets == PAD_CHAR_int).squeeze(-1).transpose(0,1).to(targets.device) # [B,T]
-        
-        outputs = self.transformer.forward(targets_onehot, img_features,
-                                           tgt_mask=tgt_mask,
-                                           tgt_key_padding_mask=tgt_key_padding_mask)
-        # [T, N, d_model]
-        outputs = self.linear_output(outputs) # [T, N, vocab_size]
-        return outputs
-    
     def inference(self, img_features, start_input, output_weight=False, max_length=10):
         img_features = self.linear_img(img_features)
+        img_features = self.encoder.forward(img_features)
         # Optional: PositionEncoding for imgs
         # here ...
         
@@ -48,10 +58,8 @@ class TransformerModel(nn.Module):
             transformer_input = self.positional_encoding_text(outputs)
             transformer_input = self.linear_text(transformer_input)
             tgt_mask = nn.modules.Transformer.generate_square_subsequent_mask(None, t).to(start_input.device) # ignore SOS_CHAR
-            output, weights = self.transformer.forward(transformer_input, img_features,
-                                                       tgt_mask=tgt_mask,
-                                                       tgt_key_padding_mask=None,
-                                                       output_weight=output_weight)
+            output, weights = self.decoder.forward(transformer_input, img_features,
+                                                   output_weight=output_weight)
             output = self.linear_output(output[[-1]])
             output = F.softmax(output, -1)
             _, index = output.topk(1, -1)
@@ -84,18 +92,16 @@ class TransformerDecoder(nn.Module):
         super(TransformerDecoder, self).__init__()
         self.layers = _get_clones(decoder_layer, num_layers)
         self.num_layers = num_layers
-        self.norm = nn.LayerNorm(attn_size)
+        # self.norm = nn.LayerNorm(attn_size)
 
-    def forward(self, tgt, image_features, tgt_mask=None,
-                tgt_key_padding_mask=None, output_weight=False):
+    def forward(self, tgt, image_features, output_weight=False):
 
         output = tgt
         weights = []
         for i in range(self.num_layers):
-            output, weight = self.layers[i](output, image_features, tgt_mask=tgt_mask,
-                                    tgt_key_padding_mask=tgt_key_padding_mask)
+            output, weight = self.layers[i](image_features, tgt)
             weights.append(weight)
-        output = self.norm(output)
+        # output = self.norm(output)
 
         if output_weight:
             return output, weights
@@ -103,10 +109,68 @@ class TransformerDecoder(nn.Module):
             return output, None
 
 class TransformerDecoderLayer(nn.Module):
-    def __init__(self, attn_size, nhead, dim_feedforward=2048, dropout=0.1):
+    def __init__(self, cnn_features, vocab_size, attn_size, nhead, dim_feedforward=2048, dropout=0.1):
         super(TransformerDecoderLayer, self).__init__()
+
+        self.decoder_attn = Attention(vocab_size, vocab_size, vocab_size)
+        self.encoder_decoder_attn = Attention(cnn_features, vocab_size, attn_size)
+
+        # self.self_attn = nn.modules.MultiheadAttention(attn_size, nhead, dropout=dropout)
+        # self.multihead_attn = nn.modules.MultiheadAttention(attn_size, nhead, dropout=dropout)
+
+        # Implementation of Feedforward model
+        # self.linear1 = nn.Linear(attn_size, dim_feedforward)
+        # self.dropout = nn.Dropout(dropout)
+        # self.linear2 = nn.Linear(dim_feedforward, attn_size)
+
+        # self.norm1 = nn.LayerNorm(attn_size)
+        # self.norm2 = nn.LayerNorm(attn_size)
+        # self.norm3 = nn.LayerNorm(attn_size)
+        # self.dropout1 = nn.Dropout(dropout)
+        # self.dropout2 = nn.Dropout(dropout)
+        # self.dropout3 = nn.Dropout(dropout)
+        
+        self.attn_size = attn_size
+
+    def forward(self, image_features, tgt):
+        context_text, weight_text = self.decoder_attn.forward(tgt[[-1]], tgt)
+        # tgt = tgt + self.dropout1(tgt2)
+        # tgt = self.norm1(tgt)
+
+        context, weight = self.encoder_decoder_attn.forward(context_text, image_features)
+        # tgt = tgt + self.dropout2(tgt2)
+        # tgt = self.norm2(tgt)
+
+        # tgt2 = self.linear2(self.dropout(F.relu(self.linear1(context_img))))
+        # tgt = tgt + self.dropout3(tgt2)
+        # tgt = self.norm3(tgt)
+        # return tgt, weight
+
+        return context, weight
+
+class TransformerEncoder(nn.Module):
+
+    def __init__(self, attn_size, encoder_layer, num_layers=1):
+        super(TransformerEncoder, self).__init__()
+        self.layers = _get_clones(encoder_layer, num_layers)
+        self.num_layers = num_layers
+        self.norm = nn.LayerNorm(attn_size)
+
+    def forward(self, img_features):
+        output = img_features
+
+        for i in range(self.num_layers):
+            output = self.layers[i](output)
+
+        output = self.norm(output)
+
+        return output
+
+
+class TransformerEncoderLayer(nn.Module):
+    def __init__(self, attn_size, nhead, dim_feedforward=2048, dropout=0.1):
+        super(TransformerEncoderLayer, self).__init__()
         self.self_attn = nn.modules.MultiheadAttention(attn_size, nhead, dropout=dropout)
-        self.multihead_attn = nn.modules.MultiheadAttention(attn_size, nhead, dropout=dropout)
         # Implementation of Feedforward model
         self.linear1 = nn.Linear(attn_size, dim_feedforward)
         self.dropout = nn.Dropout(dropout)
@@ -114,25 +178,18 @@ class TransformerDecoderLayer(nn.Module):
 
         self.norm1 = nn.LayerNorm(attn_size)
         self.norm2 = nn.LayerNorm(attn_size)
-        self.norm3 = nn.LayerNorm(attn_size)
         self.dropout1 = nn.Dropout(dropout)
         self.dropout2 = nn.Dropout(dropout)
-        self.dropout3 = nn.Dropout(dropout)
-        
-        self.attn_size = attn_size
 
-    def forward(self, tgt, image_features, tgt_mask=None, tgt_key_padding_mask=None):
-        tgt2 = self.self_attn(tgt, tgt, tgt, attn_mask=tgt_mask,
-                              key_padding_mask=tgt_key_padding_mask)[0]
-        tgt = tgt + self.dropout1(tgt2)
-        tgt = self.norm1(tgt)
-        tgt2, weight = self.multihead_attn(tgt, image_features, image_features, attn_mask=None)
-        tgt = tgt + self.dropout2(tgt2)
-        tgt = self.norm2(tgt)
-        tgt2 = self.linear2(self.dropout(F.relu(self.linear1(tgt))))
-        tgt = tgt + self.dropout3(tgt2)
-        tgt = self.norm3(tgt)
-        return tgt, weight
+    def forward(self, img_features):
+        img_features2 = self.self_attn(img_features, img_features, img_features)[0]
+        img_features = img_features + self.dropout1(img_features2)
+        img_features = self.norm1(img_features)
+        img_features2 = self.linear2(self.dropout(F.relu(self.linear1(img_features))))
+        img_features = img_features + self.dropout2(img_features2)
+        img_features = self.norm2(img_features)
+        return img_features
+
 
 
 def _get_clones(module, N):
