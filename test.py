@@ -10,7 +10,7 @@ from torchvision import transforms
 
 from dataset import EOS_CHAR, get_data_loader, int2char, vocab_size
 from model import DenseNetFE, Seq2Seq, Transformer
-from utils import ScaleImageByHeight
+from utils import ScaleImageByHeight, HandcraftFeature
 
 
 def main(args):
@@ -36,8 +36,8 @@ def main(args):
     model.load_state_dict(checkpoint['model'])
 
     image_transform = transforms.Compose([
-        transforms.Grayscale(3),
         ScaleImageByHeight(config['scale_height']),
+        HandcraftFeature(),
         transforms.ToTensor(),
     ])
 
