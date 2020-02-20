@@ -22,11 +22,11 @@ import logging
 def main(args):
     config = {
         # Common
-        'dataset': 'vnondb', # Should be one of 'vnondb', 'rimes', 'iam'
+        'dataset': 'iam', # Should be one of 'vnondb', 'rimes', 'iam'
         'cnn': 'densenet', # maybe other CNN # TODO: future implement CNN
         'optimizer': 'RMSprop', # Should be one of 'adam', 'RMSprop'
-        'batch_size': 8,
-        'scale_height': 128,
+        'batch_size': 32,
+        'scale_height': 64,
         'attn_size': 256,
         'max_length': 10,
         'use_handcraft': False, # Use handcraft features as input instead of Grayscale(3)
