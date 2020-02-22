@@ -11,11 +11,15 @@ EOS_CHAR = '<end>' # end of sequence character
 PAD_CHAR = '<pad>' # padding character
 
 class Vocab(object):
-    def __init__(self, dataset):
+    def __init__(self, dataset, cnn_net):
         alphabets = get_alphabets(dataset)
         self.char2int = dict((c, i) for i, c in enumerate(alphabets))
         self.int2char = dict((i, c) for i, c in enumerate(alphabets))
         self.vocab_size = len(alphabets)
+        if cnn_net == 'densenet':
+            self.n_chanels = 3
+        elif cnn_net == 'lenet':
+            self.n_chanels = 1
     
     def __call__(self, samples):
         '''
@@ -34,7 +38,7 @@ class Vocab(object):
         # images: [B, 3, H, W]
         max_image_row = max([image.size(1) for image in image_samples])
         max_image_col = max([image.size(2) for image in image_samples])
-        images = torch.ones(batch_size, 3, max_image_row, max_image_col)
+        images = torch.ones(batch_size, self.n_chanels, max_image_row, max_image_col)
         for i, image in enumerate(image_samples):
             image_row = image.shape[1]
             image_col = image.shape[2]

@@ -76,6 +76,9 @@ class Decoder(nn.Module):
         # pdb.set_trace()
         for t in range(max_length):
             context, weight = self.attention(hidden, img_features, output_weights=True) # [B, 1, num_pixels]
+            
+            # print(rnn_input.size())
+            # print(context.size())
 
             rnn_input = torch.cat((rnn_input, context), -1)
 

@@ -12,7 +12,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms
 
 from data import get_data_loader, get_vocab, PAD_CHAR, EOS_CHAR
-from model import Seq2Seq, Transformer, DenseNetFE
+from model import Seq2Seq, Transformer, DenseNetFE, LeNetFE
 from utils import ScaleImageByHeight, HandcraftFeature
 from metrics import CharacterErrorRate, WordErrorRate
 
@@ -49,7 +49,7 @@ def main(args):
     best_metrics = dict()
 
     config = root_config['common']
-    vocab = get_vocab(config['dataset'])
+    vocab = get_vocab(config['dataset'], config['cnn'])
     logger = logging.getLogger('MainTraining')
 
     device = f'cuda:{args.gpu_id}' if torch.cuda.is_available() else 'cpu'
@@ -62,8 +62,11 @@ def main(args):
         cnn = DenseNetFE(cnn_config['depth'],
                          cnn_config['n_blocks'],
                          cnn_config['growth_rate'])
+    elif config['cnn'] == 'lenet':
+        cnn = LeNetFE()
     else:
         raise ValueError('Unknow CNN {}'.format(config['cnn']))
+    
     if args.model == 'tf':
         model_config = root_config['tf']
         model = Transformer(cnn, vocab.vocab_size, model_config)
@@ -83,7 +86,7 @@ def main(args):
         logger.setLevel(logging.DEBUG)
         print(model)
         model.eval()
-        dummy_image_input = torch.rand(config['batch_size'], 3, config['scale_height'], config['scale_height'] * 2)
+        dummy_image_input = torch.rand(config['batch_size'], 1, config['scale_height'], config['scale_height'] * 2)
         dummy_target_input = torch.rand(config['max_length'], config['batch_size'], vocab.vocab_size)
         dummy_output_train = model(dummy_image_input, dummy_target_input)
         dummy_output_greedy, _ = model.greedy(dummy_image_input, dummy_target_input[[0]])
@@ -115,17 +118,24 @@ def main(args):
         optimizer.load_state_dict(checkpoint['optimizer'])
         reduce_lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
 
-    image_transform = transforms.Compose([
-        ScaleImageByHeight(config['scale_height']),
-        HandcraftFeature() if config['use_handcraft'] else transforms.Grayscale(3),
-        transforms.ToTensor(),
-    ])
+    if config['cnn'] == 'densenet':
+        image_transform = transforms.Compose([
+            ScaleImageByHeight(config['scale_height']),
+            HandcraftFeature() if config['use_handcraft'] else transforms.Grayscale(3),
+            transforms.ToTensor(),
+        ])
+    elif config['cnn'] == 'lenet':
+        image_transform = transforms.Compose([
+            ScaleImageByHeight(config['scale_height']),
+            transforms.Grayscale(1),
+            transforms.ToTensor(),
+        ])
 
     train_loader = get_data_loader(config['dataset'], 'train', config['batch_size'],
-                                   image_transform, vocab, args.debug)
+                                   config['cnn'], image_transform, vocab, args.debug)
 
     val_loader = get_data_loader(config['dataset'], 'val', config['batch_size'],
-                                 image_transform, vocab, args.debug)
+                                 config['cnn'], image_transform, vocab, args.debug)
 
     log_dir = datetime.datetime.now().strftime('%d-%m-%Y_%H-%M-%S')
     log_dir += '_' + args.model

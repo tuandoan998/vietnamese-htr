@@ -36,14 +36,14 @@ def _get_dataset_partition_helper(dataset, partition, transform):
     
     return None
 
-def get_vocab(dataset):
-    vocab = Vocab(dataset)
+def get_vocab(dataset, cnn_net):
+    vocab = Vocab(dataset, cnn_net)
     return vocab
     
-def get_data_loader(dataset, partition, batch_size, transform=None, vocab=None, debug=False):
+def get_data_loader(dataset, partition, batch_size, cnn_net, transform=None, vocab=None, debug=False):
     data = _get_dataset_partition_helper(dataset, partition, transform)
     if vocab is None:
-        vocab = get_vocab(dataset)
+        vocab = get_vocab(dataset, cnn_net)
     
     if debug:
         loader = DataLoader(data, batch_size=batch_size,
