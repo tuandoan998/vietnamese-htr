@@ -9,7 +9,7 @@ import tqdm
 from torchvision import transforms
 
 from data import EOS_CHAR, get_data_loader, get_vocab
-from model import DenseNetFE, Seq2Seq, Transformer
+from model import DenseNetFE, Seq2Seq, Transformer, LeNetFE
 from utils import ScaleImageByHeight, HandcraftFeature
 
 
@@ -21,29 +21,45 @@ def main(args):
     checkpoint = torch.load(args.weight, map_location=device)
     config = checkpoint['config']
 
-    cnn = DenseNetFE(config['densenet']['depth'],
-                     config['densenet']['n_blocks'],
-                     config['densenet']['growth_rate'])
-    vocab = get_vocab(config['dataset'])
+    cnn_config = config['densenet']
+    if config['common']['cnn'] == 'densenet':
+        cnn_config = config['densenet']
+        cnn = DenseNetFE(cnn_config['depth'],
+                         cnn_config['n_blocks'],
+                         cnn_config['growth_rate'])
+    elif config['common']['cnn'] == 'lenet':
+        cnn = LeNetFE()
+    else:
+        raise ValueError('Unknow CNN {}'.format(config['cnn']))
+    vocab = get_vocab(config['common']['dataset'], config['common']['cnn'])
 
     if args.model == 'tf':
-        model = Transformer(cnn, vocab.vocab_size, config)
+        model_config = config['tf']
+        model = Transformer(cnn, vocab.vocab_size, model_config)
     elif args.model == 's2s':
-        model = Seq2Seq(cnn, vocab.vocab_size, config['s2s']['hidden_size'], config['s2s']['attn_size'])
+        model_config = config['s2s']
+        model = Seq2Seq(cnn, vocab.vocab_size, model_config['hidden_size'], model_config['attn_size'])
     else:
         raise ValueError('model should be "tf" or "s2s"')
     model.to(device)
 
     model.load_state_dict(checkpoint['model'])
 
-    test_transform = transforms.Compose([
-        ScaleImageByHeight(config['scale_height']),
-        HandcraftFeature() if config['use_handcraft'] else transforms.Grayscale(3),
-        transforms.ToTensor(),
-    ])
+    if config['common']['cnn'] == 'densenet':
+        test_transform = transforms.Compose([
+            ScaleImageByHeight(config['common']['scale_height']),
+            HandcraftFeature() if config['common']['use_handcraft'] else transforms.Grayscale(3),
+            transforms.ToTensor(),
+        ])
+    elif config['common']['cnn'] == 'lenet':
+        test_transform = transforms.Compose([
+            ScaleImageByHeight(config['common']['scale_height']),
+            transforms.Grayscale(1),
+            transforms.ToTensor(),
+        ])
 
-    test_loader = get_data_loader(config['dataset'], 'test', config['batch_size'],
-                                  test_transform, vocab, debug=args.debug)
+    test_loader = get_data_loader(config['common']['dataset'], 'test', config['common']['batch_size'],
+                                  config['common']['cnn'], test_transform, vocab, debug=args.debug)
     
     model.eval()
     CE = 0
@@ -58,10 +74,11 @@ def main(args):
             targets = targets.to(device)
             targets_onehot = targets_onehot.to(device)
 
-            outputs, _ = model.greedy(imgs, targets_onehot[[0]])
+            outputs, _ = model.greedy(imgs, targets_onehot[[0]].transpose(0,1))
 
             _, index = outputs.topk(1, -1)
-            predicts = index.squeeze().transpose(0, 1) # [B, T]
+            predicts = index.squeeze() # [B, T]
+            
             predicts_str = []
             for predict in predicts:
                 s = [vocab.int2char[x.item()] for x in predict]
@@ -69,7 +86,7 @@ def main(args):
                     eos_index = s.index(EOS_CHAR) + 1
                 except ValueError:
                     eos_index = len(s)
-                predicts_str.append(s[:eos_index-1]) # ignore <end>
+                predicts_str.append(s[:eos_index-1])
 
             targets_str = []
             for target in targets.transpose(0, 1).squeeze():
@@ -78,7 +95,7 @@ def main(args):
                     eos_index = s.index(EOS_CHAR) + 1
                 except ValueError:
                     eos_index = len(s)
-                targets_str.append(s[1:eos_index-1]) #ignore <start< and <end>
+                targets_str.append(s[1:eos_index-1])
             
             assert len(predicts_str) == len(targets_str)
             for j in range(len(predicts_str)):

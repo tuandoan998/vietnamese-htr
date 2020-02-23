@@ -9,7 +9,7 @@ from tqdm import tqdm
 from torchvision import transforms
 
 from data import get_data_loader, get_vocab, EOS_CHAR
-from model import DenseNetFE, Seq2Seq, Transformer
+from model import DenseNetFE, Seq2Seq, Transformer, LeNetFE
 from utils import ScaleImageByHeight, HandcraftFeature
 from metrics import CharacterErrorRate, WordErrorRate
 
@@ -30,8 +30,12 @@ def main(args):
         cnn = DenseNetFE(cnn_config['depth'],
                          cnn_config['n_blocks'],
                          cnn_config['growth_rate'])
+    elif config['common']['cnn'] == 'lenet':
+        cnn = LeNetFE()
+    else:
+        raise ValueError('Unknow CNN {}'.format(config['cnn']))
 
-    vocab = get_vocab(config['common']['dataset'])
+    vocab = get_vocab(config['common']['dataset'], config['common']['cnn'])
 
     if args.model == 'tf':
         model_config = config['tf']
@@ -45,14 +49,21 @@ def main(args):
 
     model.load_state_dict(checkpoint['model'])
 
-    test_transform = transforms.Compose([
-        ScaleImageByHeight(config['common']['scale_height']),
-        HandcraftFeature() if config['common']['use_handcraft'] else transforms.Grayscale(3),
-        transforms.ToTensor(),
-    ])
+    if config['common']['cnn'] == 'densenet':
+        test_transform = transforms.Compose([
+            ScaleImageByHeight(config['common']['scale_height']),
+            HandcraftFeature() if config['common']['use_handcraft'] else transforms.Grayscale(3),
+            transforms.ToTensor(),
+        ])
+    elif config['common']['cnn'] == 'lenet':
+        test_transform = transforms.Compose([
+            ScaleImageByHeight(config['common']['scale_height']),
+            transforms.Grayscale(1),
+            transforms.ToTensor(),
+        ])
 
-    test_loader = get_data_loader(config['common']['dataset'], 'test', config['common']['batch_size'],
-                                  test_transform, vocab, debug=args.debug)
+    test_loader = get_data_loader(config['common']['dataset'], args.parition, config['common']['batch_size'],
+                                  config['common']['cnn'], test_transform, vocab, debug=args.debug)
 
     def step_val(engine, batch):
         model.eval()
@@ -63,14 +74,14 @@ def main(args):
             targets = targets.to(device)
             targets_onehot = targets_onehot.to(device)
 
-            outputs, _ = model.greedy(imgs, targets_onehot[[0]])
+            outputs, _ = model.greedy(imgs, targets_onehot[[0]].transpose(0,1))
             outputs = outputs.topk(1,-1)[1]
 
-            return outputs, targets[1:]
+            return outputs, targets[1:].transpose(0,1)
 
     evaluator = Engine(step_val)
-    RunningAverage(CharacterErrorRate(vocab.char2int[EOS_CHAR])).attach(evaluator, 'running_cer')
-    RunningAverage(WordErrorRate(vocab.char2int[EOS_CHAR])).attach(evaluator, 'running_wer')
+    RunningAverage(CharacterErrorRate(vocab.char2int[EOS_CHAR], batch_first=True)).attach(evaluator, 'running_cer')
+    RunningAverage(WordErrorRate(vocab.char2int[EOS_CHAR], batch_first=True)).attach(evaluator, 'running_wer')
 
     @evaluator.on(Events.STARTED)
     def start_eval(engine):
@@ -101,6 +112,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('model', choices=['tf', 's2s'])
     parser.add_argument('weight', type=str, help='Path to weight of model')
+    parser.add_argument('--beamsearch', action='store_true', default=False)
+    parser.add_argument('--parition', type=str, choices=['train','val','test'], default='test')
     parser.add_argument('--verbose', action='store_true', default=False)
     parser.add_argument('--gpu-id', type=int, default=0)
     parser.add_argument('--log-interval', type=int, default=50)
