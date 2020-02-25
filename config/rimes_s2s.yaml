@@ -1,5 +1,5 @@
 common:
-    dataset: iam
+    dataset: rimes
     cnn: densenet
     optimizer: RMSprop
     batch_size: 32
@@ -10,7 +10,7 @@ common:
     n_epochs_decrease_lr: 5
     start_learning_rate: 1.0e-5
     end_learning_rate: 1.0e-11
-    max_epochs: 100
+    max_epochs: 50
     weight_decay: 0
 
 densenet:

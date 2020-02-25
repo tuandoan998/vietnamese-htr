@@ -76,12 +76,8 @@ class Decoder(nn.Module):
         # pdb.set_trace()
         for t in range(max_length):
             context, weight = self.attention(hidden, img_features, output_weights=True) # [B, 1, num_pixels]
-            
-            # print(rnn_input.size())
-            # print(context.size())
 
             rnn_input = torch.cat((rnn_input, context), -1)
-
             output, (hidden, cell_state) = self.rnn(rnn_input, (hidden, cell_state))
             output = self.character_distribution(output)
 
@@ -95,39 +91,49 @@ class Decoder(nn.Module):
     def beamsearch(self, img_features, start_input, max_length=10, beam_size=3):
         num_pixels = img_features.size(0)
         batch_size = img_features.size(1)
-
-        rnn_input = start_input
+        rnn_input = start_input.float()
+        rnn_inputs = [rnn_input] * beam_size
 
         hidden = self.init_hidden(batch_size).to(img_features.device)
+        cell_state = self.init_hidden(batch_size).to(img_features.device)
+        hiddens = [hidden] * beam_size
+        cell_states = [cell_state] * beam_size
 
-        outputs = torch.zeros(max_length, batch_size, self.vocab_size, device=img_features.device)
+        outputs = torch.zeros(max_length, batch_size, beam_size, device=img_features.device, dtype=torch.long)
         weights = torch.zeros(max_length, batch_size, num_pixels, device=img_features.device)
-        
-        terminal_words, prev_top_words, next_top_words = [], [], []
-        prev_top_words.append(rnn_input)
+        beam_weights = [weights] * 3
 
-        pdb.set_trace()
+        sequences = [[list(), 1.0]]
         for t in range(max_length):
-            for word in prev_top_words:
-                context, weight = self.attention(hidden, img_features) # [1, B, C], [num_pixels, B, 1]
-
-                rnn_input = torch.cat((rnn_input, context), -1)
-
-                output, hidden = self.rnn(rnn_input, hidden)
-                output = self.character_distribution(output)
+            for i in range(beam_size):
+                context, weight = self.attention(hiddens[i], img_features, output_weights=True) # [B, 1, num_pixels]
+                rnn_output, (hiddens[i], cell_states[i]) = self.rnn(torch.cat((rnn_inputs[i], context), -1), (hiddens[i], cell_states[i]))
+                rnn_output = self.character_distribution(rnn_output)
+                rnn_inputs[i] = rnn_output
+                beam_weights[i][[t]] = weight.transpose(0, 1)
                 
-                topv, topi = output.topk(beam_size, -1)
-#                 if topi==10:
-                    
-#                 term, top = word.addTopk(topi, topv, decoder_hidden, beam_size, voc)
-#                 terminal_words.extend(term)
-#                 next_top_words.extend(top)
+                rnn_output = F.softmax(rnn_output, dim=2).squeeze() # [B, V]
+                outputs[[t], :] = rnn_output.topk(beam_size, -1)[1]
+                print(outputs)
+                return
 
-            next_top_words.sort(key=lambda s: s[1], reverse=True)
-            prev_top_words = next_top_words[:beam_size]
-            next_top_words = []
-        terminal_words += [word.toWordScore(voc) for word in prev_top_words]
-        terminal_words.sort(key=lambda x: x[1], reverse=True)
-
-        n = min(len(terminal_words), 15)
-        return terminal_words[:n]
+def beam_search_decoder(data, k=3):
+    res = []
+    sequences = [[list(), 1.0]]
+    for row in data:
+        all_candidates = list()
+        for i in range(len(sequences)):
+            seq, score = sequences[i]
+            for j in range(len(row)):
+                candidate = [seq + [j], score * -torch.log(row[j])]
+                all_candidates.append(candidate)
+        ordered = sorted(all_candidates, key=lambda tup:tup[1])
+        sequences = ordered[:k]
+        
+        res += [x for x in sequences if x[0][-1] == char2int[EOS_CHAR]]
+        sequences = [x for x in sequences if x[0][-1] != char2int[EOS_CHAR]]
+        if len(res)==3:
+            break
+    if len(res)==0:
+        return sequences[0][0]
+    return sorted(res, key=lambda tup:tup[1])[0][0]
