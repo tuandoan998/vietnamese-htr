@@ -50,8 +50,10 @@ def main(args):
     test_loader = get_data_loader(config['common']['dataset'], 'test', config['common']['batch_size'],
                                   test_transform, vocab, debug=args.debug)
     
-    log_test = open('./log_test.txt', 'w+')
-    
+    non_word = open('./non_word.txt', 'w+')
+    real_word = open('./real_word.txt', 'w+')
+    print(f'{"G-truth": <{10}} | {"Predict": <{10}} | {"Edited": <{10}} | {"Image path": <{65}}', file=non_word)
+    print(f'{"G-truth": <{10}} | {"Predict": <{10}} | {"Edited": <{10}} | {"Image path": <{65}}', file=real_word)
     spell = Spell()
     model.eval()
     CE = 0
@@ -60,7 +62,7 @@ def main(args):
     total_words = 0
     with torch.no_grad():
         for batch in tqdm.tqdm(test_loader):
-            imgs, targets, targets_onehot, lengths = batch
+            imgs, targets, targets_onehot, lengths, paths = batch
 
             imgs = imgs.to(device)
             targets = targets.to(device)
@@ -78,7 +80,7 @@ def main(args):
                     eos_index = s.index(EOS_CHAR) + 1
                 except ValueError:
                     eos_index = len(s)
-                predicts_str.append(s[:eos_index-1]) # ignore <end>
+                predicts_str.append(s[:eos_index-1])
 
             edits_str = spell.correction(predicts_str)
 
@@ -89,7 +91,7 @@ def main(args):
                     eos_index = s.index(EOS_CHAR) + 1
                 except ValueError:
                     eos_index = len(s)
-                targets_str.append(s[1:eos_index-1]) #ignore <start> and <end>
+                targets_str.append(s[1:eos_index-1])
             
             assert len(predicts_str) == len(targets_str)
             for j in range(len(targets_str)):
@@ -99,8 +101,12 @@ def main(args):
             for j in range(len(targets_str)):
                 if not np.array_equal(np.array(edits_str[j]), np.array(targets_str[j])):
                     WE += 1
-                    print(f'{"".join(targets_str[j])} - {"".join(predicts_str[j])} - {"".join(edits_str[j])}', file=log_test)
-                    log_test.flush()
+                    if np.array_equal(np.array(edits_str[j]), np.array(predicts_str[j])):
+                        print(f'{"".join(targets_str[j]): <{10}} | {"".join(predicts_str[j]): <{10}} | {"".join(edits_str[j]): <{10}} | {paths[j]: <{65}}', file=real_word)
+                        real_word.flush()
+                    else:
+                        print(f'{"".join(targets_str[j]): <{10}} | {"".join(predicts_str[j]): <{10}} | {"".join(edits_str[j]): <{10}} | {paths[j]: <{65}}', file=non_word)
+                        non_word.flush()
             total_words += len(targets_str)
 
     CER = CE / total_characters
@@ -108,10 +114,12 @@ def main(args):
     print(f'Predict wrong {CE}/{total_characters}. CER={CER}')
     print(f'Predict wrong {WE}/{total_words}. WER={WER}')
     
-    print(f'Predict wrong {CE}/{total_characters}. CER={CER}', file=log_test)
-    print(f'Predict wrong {WE}/{total_words}. WER={WER}', file=log_test)
-    log_test.flush()
-    log_test.close()
+    print(f'Predict wrong {CE}/{total_characters}. CER={CER}', file=non_word)
+    print(f'Predict wrong {WE}/{total_words}. WER={WER}', file=non_word)
+    print(f'Predict wrong {CE}/{total_characters}. CER={CER}', file=real_word)
+    print(f'Predict wrong {WE}/{total_words}. WER={WER}', file=real_word)
+    non_word.close()
+    real_word.close()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

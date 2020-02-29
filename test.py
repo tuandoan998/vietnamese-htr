@@ -59,7 +59,7 @@ def main(args):
     if args.oneshot:
         model.eval()
         with torch.no_grad():
-            imgs, targets, targets_onehot, lengths = next(iter(test_loader))
+            imgs, targets, targets_onehot, lengths, paths = next(iter(test_loader))
             imgs = imgs.to(device)
             targets = targets.to(device)
             targets_onehot = targets_onehot.to(device)

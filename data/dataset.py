@@ -22,6 +22,7 @@ class Vocab(object):
         :param samples: list of tuples:
             - image: tensor of [C, H, W]
             - label: list of characters including '<start>' and '<end>' at both ends
+            - image_path: string path of image
         :returns:
             - images: tensor of [B, C, H, W]
             - labels: tensor of [max_T, B, 1]
@@ -29,7 +30,7 @@ class Vocab(object):
         '''
         batch_size = len(samples)
         samples.sort(key=lambda sample: len(sample[1]), reverse=True)
-        image_samples, label_samples = list(zip(*samples))
+        image_samples, label_samples, image_path_samples = list(zip(*samples))
 
         # images: [B, 3, H, W]
         max_image_row = max([image.size(1) for image in image_samples])
@@ -57,7 +58,7 @@ class Vocab(object):
                 onehot[char_int] = 1
                 labels_onehot[char_i, label_i] = onehot
 
-        return images, labels, labels_onehot, torch.tensor(label_lengths).view(-1, 1)
+        return images, labels, labels_onehot, torch.tensor(label_lengths).view(-1, 1), image_path_samples
 
 def get_alphabets(dataset):
     if dataset == 'vnondb':
@@ -102,7 +103,7 @@ class VNOnDB(Dataset):
         label = self.df['label'][idx]
         label = [SOS_CHAR] + list(label) + [EOS_CHAR]
             
-        return image, label
+        return image, label, image_path
 
 class RIMES(Dataset):
     def __init__(self, image_folder, groundtruth_txt, image_transform=None):
@@ -125,7 +126,7 @@ class RIMES(Dataset):
         label = self.content[idx].split(' ')[1]
         label = [SOS_CHAR] + list(label) + [EOS_CHAR]
             
-        return image, label
+        return image, label, image_path
     
 class IAM(Dataset):
     def __init__(self, partition_split, image_transform=None):
@@ -171,4 +172,4 @@ class IAM(Dataset):
         label = self.content[idx][1]
         label = [SOS_CHAR] + list(label) + [EOS_CHAR]
 
-        return image, label
+        return image, label, image_path

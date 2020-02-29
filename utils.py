@@ -8,6 +8,7 @@ import re
 import editdistance as ed
 from collections import defaultdict, Counter
 import glob
+import io
 
 class ScaleImageByHeight(object):
     def __init__(self, target_height):
@@ -83,11 +84,10 @@ class AverageMeter(object):
     letter n-grams
 TO-DO:
     various corpus
-    character confusion probabilities
     word-bigram probabilities.
 '''
 class Spell():
-    def __init__(self, corpus_folder='data/news'):
+    def __init__(self, corpus_folder='data/corpus'):
         self.corpus_folder = corpus_folder
         self.corpus_words = self._corpus_words()
         self.dict_words = [word for word in self.corpus_words]
@@ -100,18 +100,27 @@ class Spell():
         print('Loading corpus ...')
         corpus_words = Counter()
         for file in glob.glob(self.corpus_folder+"/*/*.txt"):
-            corpus_words += Counter(self._words(open(file, encoding='utf-16').read()))
+            with open(file, encoding='utf-16', errors='ignore') as f:
+                try:
+                    data = f.read()
+                    corpus_words += Counter(self._words(data))
+                except:
+                    continue
         print('Done!')
         return corpus_words
     
-    def _trigrams(self, word):
-        return [(word[i], word[i+1], word[i+2]) for i in range(len(word)-2)]
+    def _trigrams(self, word, padding=True):
+        trigrams = []
+        if padding:
+            trigrams += [(None, None, word[0]), (word[-1], None, None)]
+            if len(word) > 1:
+                trigrams += [(None, word[0], word[1]), (word[-2], word[-1], None)]
+        trigrams += [(word[i], word[i+1], word[i+2]) for i in range(len(word)-2)]
+        return trigrams
     
-    def build_language_model(self):
+    def build_language_model(self): ## different with thesis
         self.lm = defaultdict(lambda: defaultdict(lambda: 0))
         for word in self.corpus_words:
-            if len(word) < 3:
-                continue
             for c1, c2, c3 in self._trigrams(word):
                 self.lm[(c1, c2)][c3] += self.corpus_words[word]
         for c1_c2 in self.lm:
@@ -157,15 +166,15 @@ class Spell():
                 if n_gram1==n_gram2:
                     tf_count += 1
                     break
+        if len(word1)==len(word2):
+            tf_count += 1
         return tf_count
     
-    def _n_gram_score(self, word):
-        if len(word) < 3:
-            return 0
+    def _n_gram_score(self, word): ## different with thesis
         score = 1.0
         for c1, c2, c3 in self._trigrams(word):
             score *= self.lm[c1, c2][c3]
-        score = score**(1/float(len(word)-2))
+        score = score**(1/float(len(word)+2))
         return score
     
         

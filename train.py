@@ -145,7 +145,7 @@ def main(args):
         model.train()
         optimizer.zero_grad()
 
-        imgs, targets, targets_onehot, lengths = batch
+        imgs, targets, targets_onehot, lengths, _ = batch
 
         imgs = imgs.to(device)
         targets = targets.to(device)
@@ -166,7 +166,7 @@ def main(args):
         model.eval()
 
         with torch.no_grad():
-            imgs, targets, targets_onehot, lengths = batch
+            imgs, targets, targets_onehot, lengths, _ = batch
 
             imgs = imgs.to(device)
             targets = targets.to(device)
