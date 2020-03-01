@@ -84,6 +84,7 @@ class AverageMeter(object):
     letter n-grams
 TO-DO:
     various corpus
+    confuse character: a, á, à, â
     word-bigram probabilities.
 '''
 class Spell():
@@ -107,6 +108,7 @@ class Spell():
                 except:
                     continue
         print('Done!')
+        corpus_words = {k:corpus_words[k] for k in corpus_words if corpus_words[k] > 1} # ignore word with freq = 1
         return corpus_words
     
     def _trigrams(self, word, padding=True):
@@ -132,7 +134,7 @@ class Spell():
         res = []
         for word in predict_words:
             word = ''.join(word)
-            if word.lower() in self.dict_words or word.replace('.','',1).isdigit():
+            if word.lower() in self.dict_words or word.replace('.','',1).isdigit(): # hypothesis
                 res.append([c for c in word])
             else:
                 candidates = self._levenshtein_candidates(word)
@@ -140,6 +142,11 @@ class Spell():
                 for candidate in candidates:
                     score.update({candidate: self._tf_3gram(candidate, word) + self._n_gram_score(candidate)})
                 candidate_word = max(score.keys(), key=lambda k: score[k])
+                
+                if candidate_word.islower() and word[0].isupper(): # hypothesis
+                    candidate_word = candidate_word.replace(candidate_word[0], candidate_word[0].upper(), 1)
+                if ed.distance(candidate_word, word.lower()) >= len(word)*2/3: # hypothesis
+                    candidate_word = word
                 res.append([c for c in candidate_word])
         return res
                 
@@ -166,8 +173,8 @@ class Spell():
                 if n_gram1==n_gram2:
                     tf_count += 1
                     break
-        if len(word1)==len(word2):
-            tf_count += 1
+        if len(word1)==len(word2): # hypothesis
+            tf_count += 2
         return tf_count
     
     def _n_gram_score(self, word): ## different with thesis
@@ -183,4 +190,3 @@ if __name__=='__main__':
     spell = Spell()
     print(len(spell.dict_words))
     print(spell.correction(['hượng', 'tồn', 'mai', 'kím']))
-    # print(spell._tf_3gram('huong', 'phuoc'))

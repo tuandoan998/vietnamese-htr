@@ -51,9 +51,11 @@ def main(args):
                                   test_transform, vocab, debug=args.debug)
     
     non_word = open('./non_word.txt', 'w+')
-    real_word = open('./real_word.txt', 'w+')
+    real_word_same = open('./real_word_same.txt', 'w+')
+    real_word_diff = open('./real_word_diff.txt', 'w+')
     print(f'{"G-truth": <{10}} | {"Predict": <{10}} | {"Edited": <{10}} | {"Image path": <{65}}', file=non_word)
-    print(f'{"G-truth": <{10}} | {"Predict": <{10}} | {"Edited": <{10}} | {"Image path": <{65}}', file=real_word)
+    print(f'{"G-truth": <{10}} | {"Predict": <{10}} | {"Edited": <{10}} | {"Image path": <{65}}', file=real_word_same)
+    print(f'{"G-truth": <{10}} | {"Predict": <{10}} | {"Edited": <{10}} | {"Image path": <{65}}', file=real_word_diff)
     spell = Spell()
     model.eval()
     CE = 0
@@ -83,6 +85,11 @@ def main(args):
                 predicts_str.append(s[:eos_index-1])
 
             edits_str = spell.correction(predicts_str)
+            
+            if args.edit_predicts == True:
+                compares_str = edits_str
+            else:
+                compares_str = predicts_str
 
             targets_str = []
             for target in targets.transpose(0, 1).squeeze():
@@ -95,15 +102,19 @@ def main(args):
             
             assert len(predicts_str) == len(targets_str)
             for j in range(len(targets_str)):
-                CE += ed.distance(edits_str[j], targets_str[j])
+                CE += ed.distance(compares_str[j], targets_str[j])
             total_characters += (lengths-2).sum().item()
             
             for j in range(len(targets_str)):
-                if not np.array_equal(np.array(edits_str[j]), np.array(targets_str[j])):
+                if not np.array_equal(np.array(compares_str[j]), np.array(targets_str[j])):
                     WE += 1
                     if np.array_equal(np.array(edits_str[j]), np.array(predicts_str[j])):
-                        print(f'{"".join(targets_str[j]): <{10}} | {"".join(predicts_str[j]): <{10}} | {"".join(edits_str[j]): <{10}} | {paths[j]: <{65}}', file=real_word)
-                        real_word.flush()
+                        if ed.distance(''.join(predicts_str[j]).lower(), ''.join(targets_str[j]).lower()) <= 1:
+                            print(f'{"".join(targets_str[j]): <{10}} | {"".join(predicts_str[j]): <{10}} | {"".join(edits_str[j]): <{10}} | {paths[j]: <{65}}', file=real_word_same)
+                            real_word_same.flush()
+                        else:
+                            print(f'{"".join(targets_str[j]): <{10}} | {"".join(predicts_str[j]): <{10}} | {"".join(edits_str[j]): <{10}} | {paths[j]: <{65}}', file=real_word_diff)
+                            real_word_diff.flush()
                     else:
                         print(f'{"".join(targets_str[j]): <{10}} | {"".join(predicts_str[j]): <{10}} | {"".join(edits_str[j]): <{10}} | {paths[j]: <{65}}', file=non_word)
                         non_word.flush()
@@ -116,10 +127,13 @@ def main(args):
     
     print(f'Predict wrong {CE}/{total_characters}. CER={CER}', file=non_word)
     print(f'Predict wrong {WE}/{total_words}. WER={WER}', file=non_word)
-    print(f'Predict wrong {CE}/{total_characters}. CER={CER}', file=real_word)
-    print(f'Predict wrong {WE}/{total_words}. WER={WER}', file=real_word)
+    print(f'Predict wrong {CE}/{total_characters}. CER={CER}', file=real_word_same)
+    print(f'Predict wrong {WE}/{total_words}. WER={WER}', file=real_word_same)
+    print(f'Predict wrong {CE}/{total_characters}. CER={CER}', file=real_word_diff)
+    print(f'Predict wrong {WE}/{total_words}. WER={WER}', file=real_word_diff)
     non_word.close()
-    real_word.close()
+    real_word_same.close()
+    real_word_diff.close()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -127,6 +141,7 @@ if __name__ == '__main__':
     parser.add_argument('weight', type=str, help='Path to weight of model')
     parser.add_argument('--gpu-id', type=int, default=0)
     parser.add_argument('--debug', action='store_true', default=False)
+    parser.add_argument('--edit-predicts', action='store_true', default=False)
     args = parser.parse_args()
 
     main(args)
