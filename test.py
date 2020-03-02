@@ -10,7 +10,7 @@ from torchvision import transforms
 
 from data import get_data_loader, get_vocab, EOS_CHAR
 from model import DenseNetFE, Seq2Seq, Transformer
-from utils import ScaleImageByHeight, HandcraftFeature
+from utils import ScaleImageByHeight, HandcraftFeature, Spell
 from metrics import CharacterErrorRate, WordErrorRate
 
 from ignite.engine import Engine, Events
@@ -56,6 +56,9 @@ def main(args):
     test_loader = get_data_loader(config['common']['dataset'], args.parition, config['common']['batch_size'],
                                   test_transform, vocab, debug=args.debug)
 
+    if args.edit_predicts:
+        spell = Spell()
+    
     if args.oneshot:
         model.eval()
         with torch.no_grad():
@@ -76,7 +79,7 @@ def main(args):
     def step_val(engine, batch):
         model.eval()
         with torch.no_grad():
-            imgs, targets, targets_onehot, lengths = batch
+            imgs, targets, targets_onehot, lengths, paths = batch
 
             imgs = imgs.to(device)
             targets = targets.to(device)
@@ -85,7 +88,18 @@ def main(args):
             outputs, _ = model.greedy(imgs, targets_onehot[[0]].transpose(0,1))
             outputs = outputs.topk(1,-1)[1]
 
-            return outputs, targets[1:].transpose(0,1)
+            if args.edit_predicts:
+                outputs = [[vocab.int2char[int(x)] for x in word] for word in outputs.squeeze(-1)]
+                outputs = [(word[:word.index(EOS_CHAR)] if EOS_CHAR in word else word) for word in outputs]
+                edits_str = spell.correction(outputs)
+                edits_str = torch.tensor( \
+                    [([vocab.char2int[x if x in vocab.char2int else (x.upper() if x.islower() else x.lower())] for x in word] +\
+                    [vocab.char2int[EOS_CHAR]]*(10 - len(word))) for word in edits_str],\
+                    device=device).unsqueeze(-1)
+                return edits_str, targets[1:].transpose(0,1)
+            else:
+                return outputs, targets[1:].transpose(0,1)
+                
 
     evaluator = Engine(step_val)
     RunningAverage(CharacterErrorRate(vocab.char2int[EOS_CHAR], batch_first=True)).attach(evaluator, 'running_cer')
@@ -127,6 +141,7 @@ if __name__ == '__main__':
     parser.add_argument('--log-interval', type=int, default=50)
     parser.add_argument('--debug', action='store_true', default=False)
     parser.add_argument('--oneshot', action='store_true', default=False)
+    parser.add_argument('--edit-predicts', action='store_true', default=False)
     args = parser.parse_args()
 
     main(args)

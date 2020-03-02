@@ -10,7 +10,7 @@ from torchvision import transforms
 
 from data import EOS_CHAR, get_data_loader, get_vocab
 from model import DenseNetFE, Seq2Seq, Transformer
-from utils import ScaleImageByHeight, HandcraftFeature, Spell
+from utils import ScaleImageByHeight, HandcraftFeature, Spell, PaddingWidth
 
 
 def main(args):
@@ -73,7 +73,7 @@ def main(args):
             outputs, _ = model.greedy(imgs, targets_onehot[[0]].transpose(0,1))
 
             _, index = outputs.topk(1, -1)
-            predicts = index.squeeze() # [B, T]
+            predicts = index.squeeze(-1) # [B, T]
             
             predicts_str = []
             for predict in predicts:
@@ -92,7 +92,7 @@ def main(args):
                 compares_str = predicts_str
 
             targets_str = []
-            for target in targets.transpose(0, 1).squeeze():
+            for target in targets.transpose(0, 1).squeeze(-1):
                 s = [vocab.int2char[x.item()] for x in target]
                 try:
                     eos_index = s.index(EOS_CHAR) + 1

@@ -8,7 +8,6 @@ import re
 import editdistance as ed
 from collections import defaultdict, Counter
 import glob
-import io
 
 class ScaleImageByHeight(object):
     def __init__(self, target_height):
@@ -189,4 +188,4 @@ class Spell():
 if __name__=='__main__':
     spell = Spell()
     print(len(spell.dict_words))
-    print(spell.correction(['hượng', 'tồn', 'mai', 'kím']))
+    print(spell.correction([['h','ư','ợ','n','g'], ['t','ồ','n']]))
