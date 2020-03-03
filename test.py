@@ -94,7 +94,7 @@ def main(args):
                 edits_str = spell.correction(outputs)
                 edits_str = torch.tensor( \
                     [([vocab.char2int[x if x in vocab.char2int else (x.upper() if x.islower() else x.lower())] for x in word] +\
-                    [vocab.char2int[EOS_CHAR]]*(10 - len(word))) for word in edits_str],\
+                    [vocab.char2int[EOS_CHAR]]*(config['common']['max_length'] - len(word))) for word in edits_str],\
                     device=device).unsqueeze(-1)
                 return edits_str, targets[1:].transpose(0,1)
             else:

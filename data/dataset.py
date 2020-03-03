@@ -154,7 +154,7 @@ class IAM(Dataset):
                 fn = '{}.png'.format(line_split[0])
                 img_path = os.path.join(label_dir, sub_label_dir, fn)
 
-                gt_text = ' '.join(line_split[8:]) # Word, but contains spaces
+                gt_text = (' '.join(line_split[8:]))[:20]
 
                 if sub_label_dir in self.partition_folder:
                     self.content.append([img_path, gt_text])

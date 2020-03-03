@@ -86,7 +86,7 @@ def main(args):
 
             edits_str = spell.correction(predicts_str)
             
-            if args.edit_predicts == True:
+            if args.edit_predicts:
                 compares_str = edits_str
             else:
                 compares_str = predicts_str
