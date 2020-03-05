@@ -84,7 +84,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('model', choices=['tf', 's2s'])
     parser.add_argument('weight', type=str, help='Path to weight of model')
-    parser.add_argument('image_path', type=str)
+    parser.add_argument('--image_path', type=str)
     parser.add_argument('--output-weights', action='store_true', default=False)
     parser.add_argument('--beamsearch', action='store_true', default=False)
     parser.add_argument('--verbose', action='store_true', default=False)
