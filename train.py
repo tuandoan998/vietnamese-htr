@@ -185,7 +185,7 @@ def main(args):
                 outputs, _ = model.module.greedy(imgs, targets_onehot[[0]].transpose(0,1), output_weights=False)
             else:
                 outputs, _ = model.greedy(imgs, targets_onehot[[0]].transpose(0,1), output_weights=False)
-            outputs = outputs.topk(1, -1)[1]
+            # outputs = outputs.topk(1, -1)[1]
 
             logits = pack_padded_sequence(logits, (lengths - 1).squeeze(-1), batch_first=True)[0]
             packed_targets = pack_padded_sequence(targets[1:].transpose(0,1).squeeze(-1), (lengths - 1).squeeze(-1), batch_first=True)[0]

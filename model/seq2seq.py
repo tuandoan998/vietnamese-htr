@@ -29,6 +29,11 @@ class Seq2Seq(nn.Module):
         return predicts
 
     def greedy(self, image, start_input, max_length=10, output_weights=False):
+        '''
+        Output:
+        - predicts: [B, L]
+        - weights: [B, L, H, W]
+        '''
         batch_size, _, input_image_h, input_image_w = image.size()
         image_features = self.cnn(image) # [B, C', H', W']
         image_features = image_features.view(batch_size, self.cnn.n_features, -1) # [B, C', S=H'xW']
@@ -41,3 +46,18 @@ class Seq2Seq(nn.Module):
             return predicts, weights
         else:
             return predicts, None
+
+    def beamsearch(self, image, start_input, EOS_index, max_length, beam_size, output_weights=False):
+        '''
+        Output:
+        - predicts: [B, L]
+        - weights: [B, L, H, W]
+        '''
+        batch_size, _, input_image_h, input_image_w = image.size()
+        image_features = self.cnn(image) # [B, C', H', W']
+        image_features = image_features.view(batch_size, self.cnn.n_features, -1) # [B, C', S=H'xW']
+        image_features = image_features.transpose(1,2) # [B,S,C']
+
+        predicts = self.decoder.beamsearch(image_features, start_input, EOS_index, max_length, beam_size)
+
+        return predicts

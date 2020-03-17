@@ -68,8 +68,7 @@ def main(args):
             targets_onehot = targets_onehot.to(device)
 
             outputs, _ = model.greedy(imgs, targets_onehot[[0]].transpose(0,1))
-            outputs = outputs.topk(1, -1)[1]
-            outputs, targets = outputs.squeeze(-1), targets[1:].transpose(0,1).squeeze(-1)
+            targets = targets[1:].transpose(0,1).squeeze(-1)
             outputs = outputs.to('cpu').tolist()
             targets = targets.to('cpu').tolist()
             for sample in zip(outputs, targets):
@@ -86,10 +85,9 @@ def main(args):
             targets_onehot = targets_onehot.to(device)
 
             outputs, _ = model.greedy(imgs, targets_onehot[[0]].transpose(0,1))
-            outputs = outputs.topk(1,-1)[1]
 
             if args.edit_predicts:
-                outputs = [[vocab.int2char[int(x)] for x in word] for word in outputs.squeeze(-1)]
+                outputs = [[vocab.int2char[int(x)] for x in word] for word in outputs]
                 outputs = [(word[:word.index(EOS_CHAR)] if EOS_CHAR in word else word) for word in outputs]
                 edits_str = spell.correction(outputs)
                 edits_str = torch.tensor( \

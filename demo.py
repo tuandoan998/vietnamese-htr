@@ -73,9 +73,9 @@ def main(args):
             sos_input = sos_input.unsqueeze(0).unsqueeze(0) # [B,1,V] where B = 1
             sos_input = sos_input.to(device)
             outputs, weights = model.module.greedy(image, sos_input, output_weights=args.output_weights)
-            outputs = outputs.topk(1, -1)[1] # [B,T,1]
+            # outputs = outputs.topk(1, -1)[1] # [B,T,1]
             outputs = outputs.to('cpu')
-            outputs = outputs.squeeze(0).squeeze(-1).tolist() # remove batch and 1
+            outputs = outputs.squeeze(0).tolist() # remove batch
             outputs = [vocab.int2char[output] for output in outputs]
             outputs = outputs[:outputs.index(EOS_CHAR)+1]
             print(outputs)

@@ -84,8 +84,8 @@ class HTR(object):
         try:
             with graph.as_default():
                 output = []
-                img = prepareImg(cv2.imread(path), 64)
-                ws = wordSegmentation(img, kernelSize=25, sigma=11, theta=4, minArea=200)
+                img = prepareImg(cv2.imread(path), 128)
+                ws = wordSegmentation(img, kernelSize=55, sigma=11, theta=4, minArea=1000)
                 if not os.path.exists('tmp'):
                     os.mkdir('tmp')
                 for (j, w) in enumerate(ws):
@@ -97,7 +97,7 @@ class HTR(object):
                     text = self.word_predict('tmp/'+f)
                     print(text)
                     output.append(text)
-                shutil.rmtree('tmp')
+                # shutil.rmtree('tmp')
             return output
 
         except Exception as err:

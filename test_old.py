@@ -70,10 +70,7 @@ def main(args):
             targets = targets.to(device)
             targets_onehot = targets_onehot.to(device)
 
-            outputs, _ = model.greedy(imgs, targets_onehot[[0]].transpose(0,1))
-
-            _, index = outputs.topk(1, -1)
-            predicts = index.squeeze(-1) # [B, T]
+            predicts, _ = model.greedy(imgs, targets_onehot[[0]].transpose(0,1))
             
             predicts_str = []
             for predict in predicts:

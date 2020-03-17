@@ -112,3 +112,5 @@ runs/*
 
 # VSCode
 .vscode/
+tmp/
+tmp_images/
