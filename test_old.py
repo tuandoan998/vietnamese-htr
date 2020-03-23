@@ -50,13 +50,9 @@ def main(args):
     test_loader = get_data_loader(config['common']['dataset'], 'test', config['common']['batch_size'],
                                   test_transform, vocab, debug=args.debug)
     
-    non_word = open('./non_word.txt', 'w+')
-    real_word_same = open('./real_word_same.txt', 'w+')
-    real_word_diff = open('./real_word_diff.txt', 'w+')
-    print(f'{"G-truth": <{10}} | {"Predict": <{10}} | {"Edited": <{10}} | {"Image path": <{65}}', file=non_word)
-    print(f'{"G-truth": <{10}} | {"Predict": <{10}} | {"Edited": <{10}} | {"Image path": <{65}}', file=real_word_same)
-    print(f'{"G-truth": <{10}} | {"Predict": <{10}} | {"Edited": <{10}} | {"Image path": <{65}}', file=real_word_diff)
-    spell = Spell()
+    if args.edit_predicts:
+        spell = Spell()
+
     model.eval()
     CE = 0
     WE = 0
@@ -70,8 +66,24 @@ def main(args):
             targets = targets.to(device)
             targets_onehot = targets_onehot.to(device)
 
-            predicts, _ = model.greedy(imgs, targets_onehot[[0]].transpose(0,1))
-            
+            targets_str = []
+            for target in targets.transpose(0, 1).squeeze(-1):
+                s = [vocab.int2char[x.item()] for x in target]
+                try:
+                    eos_index = s.index(EOS_CHAR) + 1
+                except ValueError:
+                    eos_index = len(s)
+                targets_str.append(s[1:eos_index-1])
+
+            if args.beamsearch:
+                predicts = model.beamsearch(imgs, targets_onehot[[0]].transpose(0,1), vocab.char2int[EOS_CHAR], 10, 3)
+            else:
+                predicts, _ = model.greedy(imgs, targets_onehot[[0]].transpose(0,1))
+
+            if args.model == 'tf':
+                _, index = predicts.topk(1, -1)
+                predicts = index.squeeze(-1)
+
             predicts_str = []
             for predict in predicts:
                 s = [vocab.int2char[x.item()] for x in predict]
@@ -81,56 +93,26 @@ def main(args):
                     eos_index = len(s)
                 predicts_str.append(s[:eos_index-1])
 
-            edits_str = spell.correction(predicts_str)
-            
             if args.edit_predicts:
-                compares_str = edits_str
-            else:
-                compares_str = predicts_str
-
-            targets_str = []
-            for target in targets.transpose(0, 1).squeeze(-1):
-                s = [vocab.int2char[x.item()] for x in target]
-                try:
-                    eos_index = s.index(EOS_CHAR) + 1
-                except ValueError:
-                    eos_index = len(s)
-                targets_str.append(s[1:eos_index-1])
+                predicts_str = spell.correction(predicts_str, targets_str, paths)
             
             assert len(predicts_str) == len(targets_str)
             for j in range(len(targets_str)):
-                CE += ed.distance(compares_str[j], targets_str[j])
+                CE += ed.distance(predicts_str[j], targets_str[j])
             total_characters += (lengths-2).sum().item()
             
             for j in range(len(targets_str)):
-                if not np.array_equal(np.array(compares_str[j]), np.array(targets_str[j])):
+                if not np.array_equal(np.array(predicts_str[j]), np.array(targets_str[j])):
                     WE += 1
-                    if np.array_equal(np.array(edits_str[j]), np.array(predicts_str[j])):
-                        if ed.distance(''.join(predicts_str[j]).lower(), ''.join(targets_str[j]).lower()) <= 1:
-                            print(f'{"".join(targets_str[j]): <{10}} | {"".join(predicts_str[j]): <{10}} | {"".join(edits_str[j]): <{10}} | {paths[j]: <{65}}', file=real_word_same)
-                            real_word_same.flush()
-                        else:
-                            print(f'{"".join(targets_str[j]): <{10}} | {"".join(predicts_str[j]): <{10}} | {"".join(edits_str[j]): <{10}} | {paths[j]: <{65}}', file=real_word_diff)
-                            real_word_diff.flush()
-                    else:
-                        print(f'{"".join(targets_str[j]): <{10}} | {"".join(predicts_str[j]): <{10}} | {"".join(edits_str[j]): <{10}} | {paths[j]: <{65}}', file=non_word)
-                        non_word.flush()
+
             total_words += len(targets_str)
 
     CER = CE / total_characters
     WER = WE / total_words
     print(f'Predict wrong {CE}/{total_characters}. CER={CER}')
     print(f'Predict wrong {WE}/{total_words}. WER={WER}')
-    
-    print(f'Predict wrong {CE}/{total_characters}. CER={CER}', file=non_word)
-    print(f'Predict wrong {WE}/{total_words}. WER={WER}', file=non_word)
-    print(f'Predict wrong {CE}/{total_characters}. CER={CER}', file=real_word_same)
-    print(f'Predict wrong {WE}/{total_words}. WER={WER}', file=real_word_same)
-    print(f'Predict wrong {CE}/{total_characters}. CER={CER}', file=real_word_diff)
-    print(f'Predict wrong {WE}/{total_words}. WER={WER}', file=real_word_diff)
-    non_word.close()
-    real_word_same.close()
-    real_word_diff.close()
+    if args.edit_predicts:
+        spell.write_log()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -139,6 +121,7 @@ if __name__ == '__main__':
     parser.add_argument('--gpu-id', type=int, default=0)
     parser.add_argument('--debug', action='store_true', default=False)
     parser.add_argument('--edit-predicts', action='store_true', default=False)
+    parser.add_argument('--beamsearch', action='store_true', default=False)
     args = parser.parse_args()
 
     main(args)

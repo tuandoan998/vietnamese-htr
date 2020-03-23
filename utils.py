@@ -8,6 +8,7 @@ import re
 import editdistance as ed
 from collections import defaultdict, Counter
 import glob
+import pandas as pd
 
 class ScaleImageByHeight(object):
     def __init__(self, target_height):
@@ -88,10 +89,28 @@ TO-DO:
 '''
 class Spell():
     def __init__(self, corpus_folder='data/corpus'):
+        # to log file
+        if not os.path.exists('log'):
+            os.mkdir('log')
+        self.real_words__correct = []
+        self.real_words__incorrect = []
+        self.non_words__unedited = []
+        self.non_words__edited_to_correct = []
+        self.non_words__edited_to_incorrect = []
+
         self.corpus_folder = corpus_folder
+        df = pd.read_csv('./data/VNOnDB/test_word.csv', sep='\t', keep_default_na=False, index_col=0)
+        self.dict_words = list(df.loc[:, 'label'].astype(str))
+        self.dict_words += self._words(open('./data/Viet74K.txt').read())
+        self.dict_words = set(self.dict_words)
         self.corpus_words = self._corpus_words()
-        self.dict_words = [word for word in self.corpus_words]
+        # self.dict_words += [word for word in self.corpus_words]
         self.build_language_model()
+
+        f = open("./log/dictionary.txt","w")
+        for word in self.dict_words:
+            print(word, file=f)
+        f.close()
     
     def _words(self, text):
         return re.findall(r'\w+', text.lower())
@@ -99,15 +118,21 @@ class Spell():
     def _corpus_words(self):
         print('Loading corpus ...')
         corpus_words = Counter()
-        for file in glob.glob(self.corpus_folder+"/*/*.txt"):
-            with open(file, encoding='utf-16', errors='ignore') as f:
+        for fp in glob.glob(self.corpus_folder+"/*/*.txt"):
+            with open(fp, encoding='utf-16', errors='ignore') as f:
                 try:
                     data = f.read()
                     corpus_words += Counter(self._words(data))
                 except:
                     continue
         print('Done!')
-        corpus_words = {k:corpus_words[k] for k in corpus_words if corpus_words[k] > 1} # ignore word with freq = 1
+        corpus_words = {k:corpus_words[k] for k in corpus_words if corpus_words[k] > 10} # ignore word with freq = 1
+        corpus_words = {k: v for k, v in sorted(corpus_words.items(), key=lambda item: item[1], reverse=True)}
+        f = open("./log/corpus_words.txt","w")
+        for item in corpus_words.items():
+            print(f'{item[0]}: {item[1]}', file=f)
+        f.close()
+
         return corpus_words
     
     def _trigrams(self, word, padding=True):
@@ -129,24 +154,58 @@ class Spell():
             for c3 in self.lm[c1_c2]:
                 self.lm[c1_c2][c3] /= total_count
     
-    def correction(self, predict_words):
+    def correction(self, predict_words, target_words=None, paths=None):
         res = []
-        for word in predict_words:
-            word = ''.join(word)
-            if word.lower() in self.dict_words or word.replace('.','',1).isdigit(): # hypothesis
-                res.append([c for c in word])
-            else:
-                candidates = self._levenshtein_candidates(word)
-                score = dict()
-                for candidate in candidates:
-                    score.update({candidate: self._tf_3gram(candidate, word) + self._n_gram_score(candidate)})
-                candidate_word = max(score.keys(), key=lambda k: score[k])
-                
-                if candidate_word.islower() and word[0].isupper(): # hypothesis
-                    candidate_word = candidate_word.replace(candidate_word[0], candidate_word[0].upper(), 1)
-                if ed.distance(candidate_word, word.lower()) >= len(word)*2/3: # hypothesis
-                    candidate_word = word
-                res.append([c for c in candidate_word])
+        if target_words==None:
+            for predict_word in predict_words:
+                predict_word = ''.join(predict_word)
+                if predict_word.lower() in self.dict_words or predict_word.replace('.','',1).isdigit(): # hypothesis
+                    res.append([c for c in predict_word])
+                else:
+                    candidates = self._levenshtein_candidates(predict_word)
+                    score = dict()
+                    for candidate in candidates:
+                        score.update({candidate: self._tf_3gram(candidate, predict_word) + self._n_gram_score(candidate)})
+                    candidate_word = max(score.keys(), key=lambda k: score[k])
+                    
+                    if candidate_word.islower() and predict_word[0].isupper(): # hypothesis
+                        candidate_word = candidate_word.replace(candidate_word[0], candidate_word[0].upper(), 1)
+                    if ed.distance(candidate_word, predict_word) >= len(predict_word)*2/3: # hypothesis
+                        candidate_word = predict_word
+                    res.append([c for c in candidate_word])
+
+        else: # To write to file log
+            for predict_word, target_word, path in zip(predict_words, target_words, paths):
+                predict_word = ''.join(predict_word)
+                target_word = ''.join(target_word)
+
+                if predict_word in self.dict_words or predict_word.upper() in self.dict_words or \
+                predict_word.lower() in self.dict_words or predict_word.replace('.','',1).isdigit(): # hypothesis
+                    res.append([c for c in predict_word])
+                    if predict_word==target_word:
+                        self.real_words__correct.append([target_word, predict_word, path])
+                    else:
+                        self.real_words__incorrect.append([target_word, predict_word, path])
+                else:
+                    candidates = self._levenshtein_candidates(predict_word)
+                    score = dict()
+                    for candidate in candidates:
+                        score.update({candidate: self._tf_3gram(candidate, predict_word) + self._n_gram_score(candidate)})
+                    candidate_word = max(score.keys(), key=lambda k: score[k])
+                    
+                    if candidate_word.islower() and predict_word[0].isupper(): # hypothesis
+                        candidate_word = candidate_word.replace(candidate_word[0], candidate_word[0].upper(), 1)
+                    if ed.distance(candidate_word, predict_word) >= len(predict_word)*2/3: # hypothesis
+                        self.non_words__unedited.append([target_word, predict_word, candidate_word, path])
+                        candidate_word = predict_word
+                    else:
+                        if candidate_word==target_word:
+                            self.non_words__edited_to_correct.append([target_word, predict_word, candidate_word, path])
+                        else:
+                            self.non_words__edited_to_incorrect.append([target_word, predict_word, candidate_word, path])
+
+                    res.append([c for c in candidate_word])
+
         return res
                 
     def _levenshtein_candidates(self, predict_word):
@@ -182,10 +241,49 @@ class Spell():
             score *= self.lm[c1, c2][c3]
         score = score**(1/float(len(word)+2))
         return score
-    
+
+    def write_log(self):
+        print(f'{"Number word-images in real_words__correct: ": <{60}} {len(self.real_words__correct)}')
+        print(f'{"Number word-images in real_words__incorrect: ": <{60}} {len(self.real_words__incorrect)}')
+        print(f'{"Number word-images in non_words__unedited: ": <{60}} {len(self.non_words__unedited)}')
+        print(f'{"Number word-images in non_words__edited_to_correct: ": <{60}} {len(self.non_words__edited_to_correct)}')
+        print(f'{"Number word-images in non_words__edited_to_incorrect: ": <{60}} {len(self.non_words__edited_to_incorrect)}')
+
+        real_words__correct = open('./log/real_words__correct.txt', 'w+')
+        real_words__incorrect = open('./log/real_words__incorrect.txt', 'w+')
+        non_words__unedited = open('./log/non_words__unedited.txt', 'w+')
+        non_words__edited_to_correct = open('./log/non_words__edited_to_correct.txt', 'w+')
+        non_words__edited_to_incorrect = open('./log/non_words__edited_to_incorrect.txt', 'w+')
+        print(f'{"G-truth": <{10}} | {"Predict": <{10}} | {"Image path"}', file=real_words__correct)
+        print(f'{"G-truth": <{10}} | {"Predict": <{10}} | {"Image path"}', file=real_words__incorrect)
+        print(f'{"G-truth": <{10}} | {"Predict": <{10}} | {"If edited": <{10}} | {"Image path"}', file=non_words__unedited)
+        print(f'{"G-truth": <{10}} | {"Predict": <{10}} | {"Edited": <{10}} | {"Image path"}', file=non_words__edited_to_correct)
+        print(f'{"G-truth": <{10}} | {"Predict": <{10}} | {"Edited": <{10}} | {"Image path"}', file=non_words__edited_to_incorrect)
+
+        for (target_w, predict_w, path) in self.real_words__correct:
+            print(f'{target_w: <{10}} | {predict_w: <{10}} | {path}', file=real_words__correct)
+            real_words__correct.flush()
+        for (target_w, predict_w, path) in self.real_words__incorrect:
+            print(f'{target_w: <{10}} | {predict_w: <{10}} | {path}', file=real_words__incorrect)
+            real_words__incorrect.flush()
+        for (target_w, predict_w, edit_w, path) in self.non_words__unedited:
+            print(f'{target_w: <{10}} | {predict_w: <{10}} | {edit_w: <{10}} | {path}', file=non_words__unedited)
+            non_words__unedited.flush()
+        for (target_w, predict_w, edit_w, path) in self.non_words__edited_to_correct:
+            print(f'{target_w: <{10}} | {predict_w: <{10}} | {edit_w: <{10}} | {path}', file=non_words__edited_to_correct)
+            non_words__edited_to_correct.flush()
+        for (target_w, predict_w, edit_w, path) in self.non_words__edited_to_incorrect:
+            print(f'{target_w: <{10}} | {predict_w: <{10}} | {edit_w: <{10}} | {path}', file=non_words__edited_to_incorrect)
+            non_words__edited_to_incorrect.flush()
+
+        real_words__correct.close()
+        real_words__incorrect.close()
+        non_words__unedited.close()
+        non_words__edited_to_correct.close()
+        non_words__edited_to_incorrect.close()
         
                 
 if __name__=='__main__':
     spell = Spell()
     print(len(spell.dict_words))
-    print(spell.correction([['h','ư','ợ','n','g'], ['t','ồ','n']]))
+    print(spell.correction([['h','ư','ợ','n','g'], ['H','I','Ệ', 'V'], ['A', 'd', 'S']]))

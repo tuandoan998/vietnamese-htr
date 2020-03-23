@@ -86,6 +86,10 @@ def main(args):
 
             outputs, _ = model.greedy(imgs, targets_onehot[[0]].transpose(0,1))
 
+            if args.model == 'tf':
+                _, index = outputs.topk(1, -1)
+                outputs = index.squeeze(-1)
+
             if args.edit_predicts:
                 outputs = [[vocab.int2char[int(x)] for x in word] for word in outputs]
                 outputs = [(word[:word.index(EOS_CHAR)] if EOS_CHAR in word else word) for word in outputs]
