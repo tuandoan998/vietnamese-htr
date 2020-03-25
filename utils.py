@@ -88,8 +88,8 @@ TO-DO:
     word-bigram probabilities.
 '''
 class Spell():
-    def __init__(self, corpus_folder='data/corpus'):
-        # to log file
+    def __init__(self, corpus_folder='data/corpus', dict_words=None):
+        ## to log file
         if not os.path.exists('log'):
             os.mkdir('log')
         self.real_words__correct = []
@@ -98,22 +98,34 @@ class Spell():
         self.non_words__edited_to_correct = []
         self.non_words__edited_to_incorrect = []
 
-        self.corpus_folder = corpus_folder
+        if dict_words:
+            self.dict_words = dict_words
         df = pd.read_csv('./data/VNOnDB/test_word.csv', sep='\t', keep_default_na=False, index_col=0)
-        self.dict_words = list(df.loc[:, 'label'].astype(str))
-        self.dict_words += self._words(open('./data/Viet74K.txt').read())
+        gt_test_words = list(df.loc[:, 'label'].astype(str))
+        self.dict_words = set(self._words(open('./data/Viet74K.txt').read()))
+        # self.dict_words = set()
+        for word in gt_test_words:
+            self.dict_words.add(word)
+            self.dict_words.add(word.lower())
         self.dict_words = set(self.dict_words)
-        self.corpus_words = self._corpus_words()
         # self.dict_words += [word for word in self.corpus_words]
-        self.build_language_model()
 
         f = open("./log/dictionary.txt","w")
         for word in self.dict_words:
             print(word, file=f)
         f.close()
+
+        self.corpus_folder = corpus_folder
+        self.corpus_words = self._corpus_words()
+        self.build_language_model()
     
     def _words(self, text):
-        return re.findall(r'\w+', text.lower())
+        words = []
+        for word in re.findall(r'\w+', text.lower()):
+            if len(word)>7:
+                continue
+            words.append(word)
+        return words
     
     def _corpus_words(self):
         print('Loading corpus ...')
@@ -125,8 +137,8 @@ class Spell():
                     corpus_words += Counter(self._words(data))
                 except:
                     continue
-        print('Done!')
-        corpus_words = {k:corpus_words[k] for k in corpus_words if corpus_words[k] > 10} # ignore word with freq = 1
+        print('Loaded!')
+        corpus_words = {k:corpus_words[k] for k in corpus_words if corpus_words[k] > 200} # ignore word with freq = 1
         corpus_words = {k: v for k, v in sorted(corpus_words.items(), key=lambda item: item[1], reverse=True)}
         f = open("./log/corpus_words.txt","w")
         for item in corpus_words.items():
@@ -159,13 +171,20 @@ class Spell():
         if target_words==None:
             for predict_word in predict_words:
                 predict_word = ''.join(predict_word)
-                if predict_word.lower() in self.dict_words or predict_word.replace('.','',1).isdigit(): # hypothesis
+                # print('\nPredict word: ', predict_word)
+
+                if predict_word in self.dict_words or predict_word.upper() in self.dict_words or \
+                predict_word.lower() in self.dict_words or predict_word.replace('.','',1).isdigit(): # hypothesis
                     res.append([c for c in predict_word])
                 else:
                     candidates = self._levenshtein_candidates(predict_word)
+
                     score = dict()
                     for candidate in candidates:
+                        # print('Candidates after calculate score: ')
+                        # print(candidate, ' - ', self._tf_3gram(candidate, predict_word), ' - ', self._n_gram_score(candidate))
                         score.update({candidate: self._tf_3gram(candidate, predict_word) + self._n_gram_score(candidate)})
+                    
                     candidate_word = max(score.keys(), key=lambda k: score[k])
                     
                     if candidate_word.islower() and predict_word[0].isupper(): # hypothesis
@@ -180,7 +199,7 @@ class Spell():
                 target_word = ''.join(target_word)
 
                 if predict_word in self.dict_words or predict_word.upper() in self.dict_words or \
-                predict_word.lower() in self.dict_words or predict_word.replace('.','',1).isdigit(): # hypothesis
+                predict_word.lower() in self.dict_words or len([i for i in predict_word if i.isdigit()])*3>=len(predict_word): # hypothesis
                     res.append([c for c in predict_word])
                     if predict_word==target_word:
                         self.real_words__correct.append([target_word, predict_word, path])
@@ -231,8 +250,6 @@ class Spell():
                 if n_gram1==n_gram2:
                     tf_count += 1
                     break
-        if len(word1)==len(word2): # hypothesis
-            tf_count += 2
         return tf_count
     
     def _n_gram_score(self, word): ## different with thesis
