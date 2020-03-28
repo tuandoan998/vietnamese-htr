@@ -1,0 +1,12 @@
+decoder:
+  name: transformer
+  attn_size: 256
+  use_encoder: False
+  encoder_nhead: 1
+  decoder_nhead: 1
+  
+  encoder_nlayers: 1
+  decoder_nlayers: 1
+  nhead: 8
+  dim_feedforward: 2048
+  dropout: 0.1

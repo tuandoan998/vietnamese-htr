@@ -1,0 +1,3 @@
+cnn:
+  class: model.feature_extractor.ResnetFE
+  version: resnet50

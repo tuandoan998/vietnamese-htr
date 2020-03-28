@@ -1,0 +1,11 @@
+common:
+  batch_size: 8
+  scale_height: 96
+  max_length: 15
+  n_epochs_decrease_lr: 5
+  log_interval: 50
+  max_epochs: 50
+  train_partition: train # train / val / test / trainval
+  val_partition: val # train / val / test / trainval
+  test_partition: test # train / val / test / trainval
+  num_workers: 2

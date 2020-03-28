@@ -17,14 +17,19 @@ class Transformer(nn.Module):
         self.Vc = nn.Linear(self.vocab.size, config['attn_size'])
         self.character_distribution = nn.Linear(config['attn_size'], self.vocab.size)
 
-        self.transformer = nn.Transformer(
-                d_model=config['attn_size'],
-                nhead=config['nhead'],
-                num_encoder_layers=config['encoder_nlayers'],
-                num_decoder_layers=config['decoder_nlayers'],
-                dim_feedforward=config['dim_feedforward'],
-                dropout=config['dropout'],
-        )
+        # self.transformer = nn.Transformer(
+        #         d_model=config['attn_size'],
+        #         nhead=config['nhead'],
+        #         num_encoder_layers=config['encoder_nlayers'],
+        #         num_decoder_layers=config['decoder_nlayers'],
+        #         dim_feedforward=config['dim_feedforward'],
+        #         dropout=config['dropout'],
+        # )
+
+        decoder_layer = nn.TransformerDecoderLayer(config['attn_size'], config['nhead'],
+                                                   dim_feedforward=config['dim_feedforward'],
+                                                   dropout=config['dropout'])
+        self.transformer = nn.TransformerDecoder(decoder_layer, config['decoder_nlayers'])
         
         #self.pe_text = PositionalEncoding1d(config['attn_size'], batch_first=True)
         #self.pe_image = PositionalEncoding2d(self.cnn.n_features)
@@ -78,13 +83,13 @@ class Transformer(nn.Module):
         targets = self.embed_text(targets) # [B, T, A]
         targets = targets.transpose_(0,1) # [T, B, A]
 
-        max_length = targets.size(0)
-        attn_mask = nn.Transformer.generate_square_subsequent_mask(None, max_length).to(targets.device)
-        output = self.transformer(image_features, targets, tgt_mask=attn_mask)
+        attn_mask = nn.Transformer.generate_square_subsequent_mask(None, targets.size(0)).to(targets.device)
+        # output = self.transformer(image_features, targets, tgt_mask=attn_mask)
+        output = self.transformer(targets, image_features, tgt_mask=attn_mask)
         output = self.character_distribution(output.transpose_(0,1))
         return output
 
-    def greedy(self, images, start_input, output_weights=False, max_length=10):
+    def greedy(self, images, start_input, output_weights=False, max_length=15):
         '''
         Inputs:
         :param images: [B,C,H,W]
@@ -103,7 +108,8 @@ class Transformer(nn.Module):
         for t in range(max_length):
             targets = self.embed_text(predicts) # [B,T,A]
             targets = targets.transpose_(0,1) # [T,B,A]
-            output = self.transformer(image_features, targets, tgt_mask=attn_mask[:t+1, :t+1]) # [T, B, A]
+            # output = self.transformer(image_features, targets, tgt_mask=attn_mask[:t+1, :t+1]) # [T, B, A]
+            output = self.transformer(targets, image_features, tgt_mask=attn_mask[:t+1, :t+1])
             output = output.transpose_(0, 1) # [B,T,A]
             output = self.character_distribution(output[:,[-1]]) # [B,1,V]
             output = output.argmax(-1) # [B, 1]

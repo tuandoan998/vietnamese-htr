@@ -1,0 +1,4 @@
+cnn:
+  class: model.feature_extractor.DenseNetFE
+  params:
+    version: densenet161

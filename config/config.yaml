@@ -1,0 +1,10 @@
+defaults:
+  - dataset: vnondb
+  - cnn: resnet
+  - decoder: tf
+  - optimizer: adam
+  - loss: crossentropy
+  - dataset_model: ${defaults.0.dataset}_${defaults.1.cnn}_${defaults.2.decoder}
+    optional: true
+  - scheduler: reduce_lr_on_plateau
+  - common

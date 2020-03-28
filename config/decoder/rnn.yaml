@@ -1,0 +1,6 @@
+decoder:
+  name: rnn
+  attention: additive
+  attn_size: 256
+  hidden_size: 256
+  teacher_forcing_ratio: 0.5

@@ -1,0 +1,3 @@
+scheduler:
+  end_lr: 1e-11
+  n_epochs_decrease_lr: 5

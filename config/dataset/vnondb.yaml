@@ -1,0 +1,11 @@
+dataset:
+  name: vnondb
+  
+  image_train_path: data/VNOnDB/train_word
+  image_val_path: data/VNOnDB/validation_word
+  image_test_path: data/VNOnDB/test_word
+
+  all_word_csv: data/VNOnDB/all_word.csv
+  train_word_csv: data/VNOnDB/train_word.csv
+  val_word_csv: data/VNOnDB/validation_word.csv
+  test_word_csv: data/VNOnDB/test_word.csv

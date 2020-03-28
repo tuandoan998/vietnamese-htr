@@ -1,0 +1,4 @@
+optimizer:
+  name: adam
+  weight_decay: 0
+  lr: 1e-5

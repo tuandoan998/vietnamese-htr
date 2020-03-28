@@ -23,9 +23,15 @@ class FE(nn.Module):
         return self.get_cnn()(inputs) # [B, C', H', W']
 
 class DenseNetFE(FE):
-    def __init__(self):
+
+    version = {
+        'densenet161': torchvision.models.densenet161,
+        'densenet121': torchvision.models.densenet121,
+    }
+
+    def __init__(self, version):
         super().__init__()
-        densenet = torchvision.models.densenet161(pretrained=True, memory_efficient=True)
+        densenet = self.version[version](pretrained=True, memory_efficient=True)
         self.cnn = densenet.features
         self.n_features = densenet.classifier.in_features
 
@@ -156,9 +162,15 @@ class ResnetFE(FE):
         resnet = torchvision.models.resnet50(pretrained=True)
         self.n_features = 2048
         self.cnn = nn.Sequential(*list(resnet.children())[:-2])
+        self.pool = nn.AdaptiveMaxPool2d((1,None))
 
     def get_cnn(self):
         return self.cnn
 
     def get_n_features(self):
         return self.n_features
+
+    def forward(self, x):
+        x = self.cnn(x)
+        x = self.pool(x)
+        return x
