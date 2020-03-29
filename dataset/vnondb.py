@@ -121,7 +121,7 @@ class Flattening():
             mark_accent = '<6>' # VNI '<CIRCUMFLEX>'
         elif bi_unicode[1]=='0306' or (bi_unicode[0] in self.breve_unicodes) or letter=='ặ' or letter=='Ặ':
             mark_accent = '<8>' # '<BREVE>'
-        elif bi_unicode[1]=='031B' or (bi_unicode[0] in self._7_unicodes):
+        elif (self.f_type=='type_2') and (bi_unicode[1]=='031B' or (bi_unicode[0] in self._7_unicodes)):
             mark_accent = '<7>'
             
         if letter=='đ' or letter=='Đ':
