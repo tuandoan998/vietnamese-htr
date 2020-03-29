@@ -220,22 +220,19 @@ class ModelRNN(Model):
         embed_image = self.Ic(embed_image) # [B, S, E]
 
         rnn_input = embed_text[:, 0].float() # [B,V]
-        embed_text = embed_text[:, 1:].float()
         hidden = self._init_hidden(batch_size).to(embed_image.device) # [B,H]
         cell_state = self._init_hidden(batch_size).to(embed_image.device) # [B,H]
 
         outputs = torch.zeros(batch_size, max_length, self.vocab.size, device=embed_image.device)
         for t in range(max_length):
-            hidden = self.Hc(hidden) # [B, E]
-            context, _ = self.attention(hidden.unsqueeze(1), embed_image, embed_image) # [B, 1, attn_size], [B, 1, S]
+            attn_hidden = self.Hc(hidden) # [B, E]
+            context, _ = self.attention(attn_hidden.unsqueeze(1), embed_image, embed_image) # [B, 1, attn_size], [B, 1, S]
             context = context.squeeze_(1) # [B, attn_size]
             # self.rnn.flatten_parameters()
             hidden, cell_state = self.rnn(torch.cat((rnn_input, context), -1), (hidden, cell_state))
             output = self.character_distribution(hidden) # [B, V]
             outputs[:, t] = output
 
-            if t == max_length - 1:
-                break
             teacher_force = torch.rand(1).item() < self.teacher_forcing_ratio
             if self.training and teacher_force:
                 rnn_input = embed_text[:, t]

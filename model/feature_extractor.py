@@ -29,9 +29,9 @@ class DenseNetFE(FE):
         'densenet121': torchvision.models.densenet121,
     }
 
-    def __init__(self, version):
+    def __init__(self, version, memory_efficient):
         super().__init__()
-        densenet = self.version[version](pretrained=True, memory_efficient=True)
+        densenet = self.version[version](pretrained=True, memory_efficient=memory_efficient)
         self.cnn = densenet.features
         self.n_features = densenet.classifier.in_features
 
@@ -44,7 +44,7 @@ class DenseNetFE(FE):
     def forward(self, inputs):
         features = super().forward(inputs)
         out = F.relu(features, inplace=True)
-        out = F.adaptive_avg_pool2d(out, (1, 1))
+        out = F.adaptive_avg_pool2d(out, (1, None))
         return out
 
 class EfficientNetFE(FE):
@@ -62,7 +62,7 @@ class EfficientNetFE(FE):
 
     def forward(self, inputs):
         features = super().forward(inputs)
-        out = F.adaptive_avg_pool2d(features, (1, 1))
+        out = F.adaptive_avg_pool2d(features, (1, None))
         return out
 
 class SqueezeNetFE(FE):

@@ -1,6 +1,6 @@
 common:
-  batch_size: 8
-  scale_height: 96
+  batch_size: 16
+  scale_height: 64
   max_length: 15
   n_epochs_decrease_lr: 5
   log_interval: 50
