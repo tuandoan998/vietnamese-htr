@@ -157,10 +157,17 @@ class CustomFE(FE):
         return self.n_features
 
 class ResnetFE(FE):
+
+    version = {
+        'resnet50': torchvision.models.resnet50,
+        'resnet18': torchvision.models.resnet18,
+        'resnet34': torchvision.models.resnet34,
+    }
+
     def __init__(self, version='resnet50'):
         super().__init__()
-        resnet = torchvision.models.resnet50(pretrained=True)
-        self.n_features = 2048
+        resnet = ResnetFE.version[version](pretrained=True)
+        self.n_features = resnet.fc.in_features
         self.cnn = nn.Sequential(*list(resnet.children())[:-2])
         self.pool = nn.AdaptiveMaxPool2d((1,None))
 

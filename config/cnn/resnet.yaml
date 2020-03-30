@@ -1,3 +1,4 @@
 cnn:
   class: model.feature_extractor.ResnetFE
-  version: resnet50
+  params:
+    version: resnet50

@@ -9,14 +9,14 @@ from PIL import Image
 from torch.utils.data import Dataset
 
 from .vocab import CollateWrapper, Vocab
-
+from hydra.utils import to_absolute_path
 
 class VNOnDBVocab(Vocab):
     def __init__(self):
         super().__init__()
-        flattening = Flattening()
-        df = pd.read_csv('./data/VNOnDB/train_word.csv', sep='\t', keep_default_na=False, index_col=0)
-        df['counter'] = df['label'].apply(lambda word: Counter([self.SOS] + re.findall(r'[\w]|<.*?>', flattening.flatten_word(word)) + [self.EOS]))
+        self.flattening = Flattening()
+        df = pd.read_csv(to_absolute_path('./data/VNOnDB/train_word.csv'), sep='\t', keep_default_na=False, index_col=0)
+        df['counter'] = df['label'].apply(lambda word: Counter([self.SOS] + re.findall(r'[\w]|<.*?>', self.flattening.flatten_word(word)) + [self.EOS]))
         counter = df['counter'].sum()
         counter.update({self.UNK: 0})
         self.alphabets = list(counter.keys())

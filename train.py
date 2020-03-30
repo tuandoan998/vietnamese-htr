@@ -16,7 +16,7 @@ from torchvision import transforms
 
 from dataset import get_data_loader
 from model import ModelTF, ModelRNN, DenseNetFE, SqueezeNetFE, EfficientNetFE, CustomFE, ResnetFE
-from utils import ScaleImageByHeight
+from utils import ScaleImageByHeight, StringTransform
 from metrics import CharacterErrorRate, WordErrorRate, Running
 from losses import FocalLoss
 
@@ -31,6 +31,13 @@ seed = 0
 torch.manual_seed(seed)
 torch.cuda.manual_seed_all(seed)
 device = f'cuda' if torch.cuda.is_available() else 'cpu'
+
+class OutputTransform(object):
+    def __init__(self, vocab, batch_first=True):
+        self.tf = StringTransform(vocab, batch_first)
+
+    def __call__(self, output):
+        return list(map(self.tf, output[2:]))
 
 @hydra.main(config_path='config/config.yaml', strict=False)
 def main(cfg):
@@ -130,13 +137,7 @@ def main(cfg):
         optimizer.load_state_dict(checkpoint['optimizer'])
         lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
 
-    log_dir = datetime.datetime.now().strftime('%d-%m-%Y_%H-%M-%S')
-    log_dir += '_' + cfg.decoder.name
-    if cfg.comment:
-        log_dir += '_' + cfg.comment
-    if cfg.debug:
-        log_dir += '_debug'
-    log_dir = os.path.join('./runs' if cfg.log_root is None else cfg.log_root, log_dir)
+    log_dir = os.getcwd()
     tb_logger = TensorboardLogger(log_dir)
     CKPT_DIR = os.path.join(tb_logger.writer.get_logdir(), 'weights')
     if not os.path.exists(CKPT_DIR):
@@ -190,8 +191,8 @@ def main(cfg):
 
     evaluator = Engine(step_val)
     Running(Loss(criterion, output_transform=lambda output: output[:2])).attach(evaluator, 'Loss')
-    Running(CharacterErrorRate(vocab, output_transform=lambda output: output[2:])).attach(evaluator, 'CER')
-    Running(WordErrorRate(vocab, output_transform=lambda output: output[2:])).attach(evaluator, 'WER')
+    Running(CharacterErrorRate(output_transform=OutputTransform(vocab, True))).attach(evaluator, 'CER')
+    Running(WordErrorRate(output_transform=OutputTransform(vocab, True))).attach(evaluator, 'WER')
 
     eval_pbar = ProgressBar(ncols=0, ascii=True, position=0)
     eval_pbar.attach(evaluator, 'all')

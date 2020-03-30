@@ -1,9 +1,10 @@
 from torch.utils.data import Dataset
+from hydra.utils import to_absolute_path
 
 class IAM(Dataset):
     def __init__(self, partition_split, image_transform=None):
-        self.image_folder = './data/IAM/words'
-        self.annotation_file = './data/IAM/words.txt'
+        self.image_folder = to_absolute_path('./data/IAM/words')
+        self.annotation_file = to_absolute_path('./data/IAM/words.txt')
         with open (partition_split) as f:
             partition_folder = f.readlines()
         self.partition_folder = [x.strip() for x in partition_folder]

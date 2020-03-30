@@ -16,7 +16,7 @@ from ignite.contrib.handlers import ProgressBar
 from torchvision import transforms
 
 from dataset import get_data_loader
-from model import Seq2Seq, Transformer, DenseNetFE, SqueezeNetFE, EfficientNetFE, CustomFE, ResnetFE
+from model import ModelTF, ModelRNN, DenseNetFE, SqueezeNetFE, EfficientNetFE, CustomFE, ResnetFE
 from utils import ScaleImageByHeight, HandcraftFeature
 from metrics import CharacterErrorRate, WordErrorRate, Running
 from losses import FocalLoss
