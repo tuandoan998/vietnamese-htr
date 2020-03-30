@@ -1,0 +1,4 @@
+cnn:
+        class: model.feature_extractor.CustomFE
+        params:
+                in_channel: 3

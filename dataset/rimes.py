@@ -6,14 +6,14 @@ from PIL import Image
 from torch.utils.data import Dataset
 
 from .vocab import CollateWrapper, Vocab
-
+from hydra.utils import to_absolute_path
 
 class RIMESVocab(Vocab):
     def __init__(self):
         super().__init__()
 
         counter = Counter()
-        with open ('./data/RIMES/groundtruth_training_icdar2011.txt') as f:
+        with open (to_absolute_path('./data/RIMES/groundtruth_training_icdar2011.txt')) as f:
             content = f.readlines()
         [counter.update([self.SOS] + list(x.strip().split(' ')[-1]) + [self.EOS]) for x in content]
         self.alphabets = list(counter.keys())

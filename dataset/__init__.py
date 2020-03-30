@@ -6,6 +6,7 @@ from .iam import IAM
 from .rimes import RIMES
 from .vnondb import VNOnDB
 
+from hydra.utils import to_absolute_path
 
 def _get_dataset_partition_helper(dataset, partition, transform):
     if dataset not in ['vnondb', 'rimes', 'iam']:
@@ -16,31 +17,31 @@ def _get_dataset_partition_helper(dataset, partition, transform):
 
     if dataset == 'vnondb':
         if partition == 'test':
-            return VNOnDB('./data/VNOnDB/test_word', './data/VNOnDB/test_word.csv', transform)
+            return VNOnDB(to_absolute_path('./data/VNOnDB/test_word'), to_absolute_path('./data/VNOnDB/test_word.csv'), transform)
         if partition == 'train':
-            return VNOnDB('./data/VNOnDB/train_word', './data/VNOnDB/train_word.csv', transform)
+            return VNOnDB(to_absolute_path('./data/VNOnDB/train_word'), to_absolute_path('./data/VNOnDB/train_word.csv'), transform)
         if partition == 'val':
-            return VNOnDB('./data/VNOnDB/validation_word', './data/VNOnDB/validation_word.csv', transform)
+            return VNOnDB(to_absolute_path('./data/VNOnDB/validation_word'), to_absolute_path('./data/VNOnDB/validation_word.csv'), transform)
         if partition == 'trainval':
-            train = VNOnDB('./data/VNOnDB/train_word', './data/VNOnDB/train_word.csv', transform)
-            val = VNOnDB('./data/VNOnDB/validation_word', './data/VNOnDB/validation_word.csv', transform)
+            train = VNOnDB(to_absolute_path('./data/VNOnDB/train_word'), to_absolute_path('./data/VNOnDB/train_word.csv'), transform)
+            val = VNOnDB(to_absolute_path('./data/VNOnDB/validation_word'), to_absolute_path('./data/VNOnDB/validation_word.csv'), transform)
             return ConcatDataset([train, val])
         return None
     elif dataset == 'rimes':
         if partition == 'test':
-            return RIMES('./data/RIMES/data_test', './data/RIMES/grount_truth_test_icdar2011.txt', transform)
+            return RIMES(to_absolute_path('./data/RIMES/data_test'), to_absolute_path('./data/RIMES/grount_truth_test_icdar2011.txt'), transform)
         if partition == 'train':
-            return RIMES('./data/RIMES/trainingsnippets_icdar/training_WR', './data/RIMES/groundtruth_training_icdar2011.txt', transform)
+            return RIMES(to_absolute_path('./data/RIMES/trainingsnippets_icdar/training_WR'), to_absolute_path('./data/RIMES/groundtruth_training_icdar2011.txt'), transform)
         if partition == 'val':
-            return RIMES('./data/RIMES/validationsnippets_icdar/testdataset_ICDAR', './data/RIMES/ground_truth_validation_icdar2011.txt', transform)
+            return RIMES(to_absolute_path('./data/RIMES/validationsnippets_icdar/testdataset_ICDAR'), to_absolute_path('./data/RIMES/ground_truth_validation_icdar2011.txt'), transform)
         return None
     elif dataset == 'iam':
         if partition == 'test':
-            return IAM('./data/IAM/splits/test.uttlist', transform)
+            return IAM(to_absolute_path('./data/IAM/splits/test.uttlist'), transform)
         if partition == 'train':
-            return IAM('./data/IAM/splits/train.uttlist', transform)
+            return IAM(to_absolute_path('./data/IAM/splits/train.uttlist'), transform)
         if partition == 'val':
-            return IAM('./data/IAM/splits/validation.uttlist', transform)
+            return IAM(to_absolute_path('./data/IAM/splits/validation.uttlist'), transform)
         return None
 
     return None
