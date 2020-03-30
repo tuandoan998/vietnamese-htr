@@ -11,4 +11,4 @@ defaults:
 
 hydra:
   run:
-    dir: outputs/${now:%Y-%m-%d}_${now:%H-%M-%S}_opt:${comment}
+    dir: outputs/${now:%Y-%m-%d}_${now:%H-%M-%S}
