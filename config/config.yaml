@@ -1,7 +1,3 @@
-hydra:
-  run:
-    dir: '.'
-
 defaults:
   - dataset: vnondb
   - cnn: resnet
@@ -12,3 +8,7 @@ defaults:
     optional: true
   - scheduler: reduce_lr_on_plateau
   - common
+
+hydra:
+  run:
+    dir: outputs/${now:%Y-%m-%d}_${now:%H-%M-%S}_opt:${comment}
