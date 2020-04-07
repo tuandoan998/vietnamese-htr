@@ -1,0 +1,24 @@
+common:
+    dataset: vnondb
+    cnn: resnet
+    optimizer: adam
+    flatten_type: flattening_2 # flattening_1, flattening_2, or leave blank
+    batch_size: 16
+    scale_height: 64
+    max_length: 13
+    use_handcraft: False
+
+    n_epochs_decrease_lr: 5
+    start_learning_rate: 1.0e-5
+    end_learning_rate: 1.0e-11
+    max_epochs: 50
+    weight_decay: 0
+    momentum: 0.9
+
+resnet:
+
+s2s:
+    hidden_size: 256
+    attn_size: 256
+    attention: additive
+    teacher_forcing_ratio: 0.5

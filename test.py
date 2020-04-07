@@ -72,6 +72,7 @@ def main(args):
         vocab = VNOnDB.vocab
 
     logger.info('Vocab size = {}'.format(vocab.size))
+    logger.info('Alphabets = {}'.format(vocab.alphabets))
 
     if config['cnn'] == 'densenet':
         cnn_config = root_config['densenet']
@@ -106,14 +107,22 @@ def main(args):
     model.load_state_dict(checkpoint['model'])
     model.eval()
     model.to(device)
-    beamsearch = model.module.beamsearch if multi_gpus else model.beamsearch
-    # greedy = model.module.greedy if multi_gpus else model.greedy
+    if args.beamsearch:
+        beamsearch = model.module.beamsearch if multi_gpus else model.beamsearch
+    elif args.beamsearch2:
+        beamsearch2 = model.module.beamsearch2 if multi_gpus else model.beamsearch2
+    else:
+        greedy = model.module.greedy if multi_gpus else model.greedy
 
     @torch.no_grad()
     def step_val(engine, batch):
         imgs, targets = batch.images.to(device), batch.labels.to(device)
-        # outputs = greedy(imgs, targets[:, 0], config['max_length'])
-        outputs = beamsearch(imgs, targets[:, 0], config['max_length'], 10)
+        if args.beamsearch:
+            outputs = beamsearch(imgs, targets[:, 0], config['max_length'], 3)
+        elif args.beamsearch2:
+            outputs = beamsearch2(imgs, targets[:, 0], config['max_length'], 3)
+        else:
+            outputs = greedy(imgs, targets[:, 0], config['max_length'])
         return outputs, targets[:, 1:]
 
     evaluator = Engine(step_val)
@@ -128,7 +137,7 @@ def main(args):
     evaluator.logger = setup_logger('Evaluator')
 
     logger.info('='*60)
-    logger.info(model)
+    # logger.info(model)
     logger.info('='*60)
     logger.info(root_config)
     logger.info('='*60)
@@ -145,6 +154,8 @@ if __name__ == '__main__':
     parser.add_argument('--multi-gpus', action='store_true', default=False)
     parser.add_argument('--num-workers', type=int, default=2)
     parser.add_argument('--log-interval', type=int, default=50)
+    parser.add_argument('--beamsearch', action='store_true', default=False)
+    parser.add_argument('--beamsearch2', action='store_true', default=False)
     args = parser.parse_args()
 
     main(args)

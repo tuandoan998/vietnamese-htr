@@ -34,8 +34,8 @@ class _BeamSearchNode(object):
     def eval(self):
         return self.log_prob / float(self.length - 1 + 1e-6)
 
-    def __lt__(self, other):
-        return self.length < other.length
+    # def __lt__(self, other):
+    #     return self.length < other.length
 
     def new(self, char_index: int, log_prob: float):
         new_node = _BeamSearchNode(
@@ -46,6 +46,38 @@ class _BeamSearchNode(object):
             self.length + 1,
         )
         return new_node
+
+class _BeamSearchNode2(object):
+    def __init__(self, beam_size, EOS_index, word_idxes=None, word_scores=None):
+        self.beam_size = beam_size
+        self.EOS_index = EOS_index
+        self.word_idxes = [] if word_idxes==None else word_idxes
+        self.word_scores = [] if word_scores==None else word_scores
+
+    def avg_score(self, end_score=None):
+        word_scores = self.word_scores[1:]
+        if end_score:
+            word_scores.append(end_score)
+        return sum(word_scores) / len(word_scores)
+
+    def add_top_k(self, top_values, top_indexs):
+        terminates, incomplete_words = [], []
+        for beam_index in range(self.beam_size):
+            if top_indexs[0][beam_index].item() == self.EOS_index and len(self.word_idxes)>1:
+                terminates.append(([idx for idx in self.word_idxes] + [self.EOS_index], self.avg_score(top_values[0][beam_index].item()))) 
+                continue
+            idxes = self.word_idxes[:]
+            scores = self.word_scores[:]
+            idxes.append(top_indexs[0][beam_index].item())
+            scores.append(top_values[0][beam_index].item())
+            incomplete_words.append(_BeamSearchNode2(self.beam_size, self.EOS_index, idxes, scores))
+        return terminates, incomplete_words
+
+    def __str__(self):
+        return ','.join(str(idx) for idx in self.word_idxes)
+
+    def to_word_score(self):
+        return ([idx for idx in self.word_idxes], self.avg_score())
 
 class Model(nn.Module):
     def __init__(self, cnn, vocab):
@@ -348,6 +380,73 @@ class ModelTF(Model):
 
         return torch.nn.utils.rnn.pad_sequence(decoded_batch, batch_first=True)[:, 1:]
 
+    def beamsearch2(self, images: torch.Tensor, start: torch.Tensor, max_length: int, beam_width: int):
+        '''
+        Shapes:
+        -------
+            - images: [B,C,H,W]
+            - start: [B]
+        Returns:
+        --------
+            - outputs: [B,T]
+            - lengths: [B]
+        '''
+
+        def decode_one_sample(image, start, max_length, beam_width):
+            '''
+            image: [S,E]
+            start: [1]
+            '''
+            start_char = _BeamSearchNode2(beam_width, self.vocab.char2int(self.vocab.EOS), [start.item()], [-4.0])
+            
+            completed_words = []
+            prev_top_tokens = []
+            next_top_tokens = []
+            prev_top_tokens.append(start_char)
+
+            # start beam search
+            image = image.unsqueeze(0) # [B=1,S,E]
+            for t in range(max_length):
+                # print('\n==Time step ', t,'==')
+                # for i, token in enumerate(prev_top_tokens):
+                #     print(f'[{i}] | {token} | {token.avg_score()}')
+                for token in prev_top_tokens:
+
+                    # decode for one step using decoder
+                    predicts = torch.tensor(token.word_idxes, dtype=torch.long).unsqueeze_(0).to(image.device) # [B=1,T]
+                    output = self.inference_step(image, predicts) # [B=1, V]
+                    
+                    top_v, top_i = output.topk(beam_width, -1) # [B=1, beam_width], [B=1, beam_width]
+                    terms, tops = token.add_top_k(top_v, top_i)
+
+                    completed_words.extend(terms)
+                    next_top_tokens.extend(tops)
+                    
+                next_top_tokens.sort(key=lambda s: s.avg_score(), reverse=True)
+                prev_top_tokens = next_top_tokens[:beam_width]
+                next_top_tokens = []
+                if len(completed_words)>=10:
+                    break
+
+            if len(completed_words)==0:
+                completed_words.extend([token.to_word_score() for token in prev_top_tokens])
+
+            completed_words.sort(key=lambda x: x[1], reverse=True)
+            result = completed_words[0][0] # top1 avg_score, list word_idxes
+            return torch.tensor(result, dtype=torch.long)
+
+        batch_size = len(images)
+        images = self.embed_image(images) # [B,S,E]
+        images.transpose_(0, 1) # [S,B,E]
+
+        decoded_batch = []
+        # decoding goes sentence by sentence
+        for idx in range(batch_size):
+            string_index = decode_one_sample(images[:, idx], start[idx], max_length, beam_width)
+            decoded_batch.append(string_index)
+
+        return torch.nn.utils.rnn.pad_sequence(decoded_batch, batch_first=True)[:, 1:]
+
 class ModelTFEncoder(ModelTF):
     def __init__(self, cnn, vocab, config):
         super().__init__(cnn, vocab, config)
@@ -402,7 +501,6 @@ class ModelRNN(Model):
         -------
             - embed_image: tensor of [B, S, C]
             - embed_text: tensor of [B, T, V], each target has <start> at beginning of the word
-
         Returns:
         --------
             - outputs: tensor of [B, T, V]
@@ -473,4 +571,114 @@ class ModelRNN(Model):
             end_flag |= (output.cpu().squeeze(-1) == self.vocab.char2int(self.vocab.EOS))
             if end_flag.all():
                 break
-        return outputs
+        return outputs 
+
+    def beamsearch(self, images: torch.Tensor, start: torch.Tensor, max_length: int, beam_width: int):
+        '''
+        Shapes:
+        -------
+            - images: [B,C,H,W]
+            - start: [B]
+        Returns:
+        --------
+            - outputs: [B,T]
+        '''
+
+        def decode_one_sample(embedded_image, start, max_length, beam_width):
+            '''
+            embedded_image: [S,E]
+            start: [1]
+            '''
+            embedded_image = embedded_image.unsqueeze(0) # [B=1, S, E]
+            hidden = self._init_hidden(1).to(embedded_image.device) # [B=1, H]
+            cell = self._init_hidden(1).to(embedded_image.device) # [B=1, H]
+            start_char = _BeamSearchNodeRNN(hidden, cell, start, beam_width, self.vocab.char2int(self.vocab.EOS))
+            
+            completed_words = []
+            prev_top_tokens = []
+            next_top_tokens = []
+            prev_top_tokens.append(start_char)
+
+            for t in range(max_length):
+                # print('\n==Time step ', t,'==')
+                # for i, token in enumerate(prev_top_tokens):
+                #     print(f'[{i}] - {token}')
+                for token in prev_top_tokens:
+                    # print('\tToken: ', token)
+                    # print(f'\t{token.last_hidden[0][:5]} | {token.last_idx}')
+
+                    hidden = token.last_hidden
+                    cell = token.last_cell
+                    attn_hidden = self.Hc(hidden) # [B=1, A]
+                    context, _ = self.attention(attn_hidden.unsqueeze(1), embedded_image, embedded_image) # [B=1, 1, A]
+                    context.squeeze_(1) # [B=1, A]
+
+                    rnn_input = torch.cat((self.embed_text(token.last_idx.unsqueeze(-1)).squeeze_(1).float(), context), -1) # [B=1, V+A]
+                    hidden, cell = self.rnn(rnn_input, (hidden, cell))
+                    rnn_output = self.character_distribution(hidden) # [B=1, V]
+                    rnn_output = F.log_softmax(rnn_output, -1) # [B=1, V]
+                    
+                    top_v, top_i = rnn_output.topk(beam_width, -1) # [B=1, beam_width], [B=1, beam_width]
+                    # print('\tTop i: ', top_i)
+                    terms, tops = token.add_top_k(top_v, top_i, hidden, cell)
+
+                    completed_words.extend(terms)
+                    next_top_tokens.extend(tops)
+                    
+                next_top_tokens.sort(key=lambda s: s.avg_score(), reverse=True)
+                prev_top_tokens = next_top_tokens[:beam_width]
+                next_top_tokens = []
+
+            completed_words.extend([token.to_word_score() for token in prev_top_tokens])
+            completed_words.sort(key=lambda x: x[1], reverse=True)
+            result = completed_words[0][0] # top1 avg_score, list word_idxes
+            return torch.tensor(result, dtype=torch.long)
+
+
+        batch_size = images.size(0)
+        embedded_images = self.embed_image(images) # [B,S,C'], S=W'xH' 
+        embedded_images = self.Ic(embedded_images) # [B,S,E]
+        
+        decoded_batch = []
+        for idx in range(batch_size):
+            # print('Word: ', str(idx), '='*10)
+            string_index = decode_one_sample(embedded_images[idx], start[idx], max_length, beam_width)
+            decoded_batch.append(string_index)
+
+        return torch.nn.utils.rnn.pad_sequence(decoded_batch, batch_first=True)
+
+class _BeamSearchNodeRNN():
+    def __init__(self, last_hidden, last_cell, last_idx, beam_size, EOS_index, word_idxes=None, word_scores=None):
+        self.last_hidden = last_hidden
+        self.last_cell = last_cell
+        self.last_idx = last_idx
+        self.beam_size = beam_size
+        self.EOS_index = EOS_index
+        self.word_idxes = [] if word_idxes==None else word_idxes
+        self.word_scores = [] if word_scores==None else word_scores
+
+    def avg_score(self, end_score=None):
+        word_scores = self.word_scores[1:]
+        if end_score:
+            word_scores.append(end_score)
+        return sum(word_scores) / len(word_scores)
+
+    def add_top_k(self, top_values, top_indexs, current_hidden, current_cell):
+        # top_values = torch.log(top_values) # log_softmax
+        terminates, incomplete_words = [], []
+        for beam_index in range(self.beam_size):
+            if top_indexs[0][beam_index].item() == self.EOS_index:
+                terminates.append(([idx for idx in self.word_idxes] + [self.EOS_index], self.avg_score(top_values[0][beam_index].item()))) 
+                continue
+            idxes = self.word_idxes[:]
+            scores = self.word_scores[:]
+            idxes.append(top_indexs[0][beam_index].item())
+            scores.append(top_values[0][beam_index].item())
+            incomplete_words.append(_BeamSearchNodeRNN(current_hidden, current_cell, top_indexs[0][beam_index], self.beam_size, self.EOS_index, idxes, scores))
+        return terminates, incomplete_words
+
+    def __str__(self):
+        return ','.join(str(idx) for idx in self.word_idxes)
+
+    def to_word_score(self):
+        return ([idx for idx in self.word_idxes], self.avg_score())
