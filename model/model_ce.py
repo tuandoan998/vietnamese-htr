@@ -303,5 +303,6 @@ class ModelCE(pl.LightningModule):
     def prepare_dataset(self, partition: str, vocab, config, image_transform):
         dataset = HTRDataset(vocab=vocab,
                              image_transform=image_transform,
+                             use_patch=config['dataset']['use_patch'],
                              **config['dataset'][partition])
         return dataset
