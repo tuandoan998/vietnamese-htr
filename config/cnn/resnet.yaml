@@ -1,5 +1,5 @@
 cnn:
   name: resnet
   args:
-    version: resnet50
+    version: resnet34
     droplast: 2

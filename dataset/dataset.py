@@ -29,4 +29,4 @@ class HTRDataset(torch.utils.data.Dataset):
 
         label = torch.tensor(list(map(self.vocab.char2int, self.df.iloc[idx, 1])))
 
-        return image, label
+        return image, label, image_path

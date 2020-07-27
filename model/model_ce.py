@@ -41,6 +41,8 @@ class ModelCE(pl.LightningModule):
         else:
             self.loss_fn = LabelSmoothingCrossEntropy(config['smoothing'])
 
+        self.log = open('misc/wer-rnn_256hidden_512attn.txt', 'wt')
+
     def embed_image(
         self,
         images: torch.Tensor,
@@ -177,7 +179,7 @@ class ModelCE(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         # prepare forward
-        images, labels, image_padding_mask, lengths = batch
+        images, labels, image_padding_mask, lengths, _ = batch
 
         input_labels = labels[:, :-1]
         input_labels_padding_mask = length_to_padding_mask(lengths - 1)
@@ -210,7 +212,7 @@ class ModelCE(pl.LightningModule):
         
     def _shared_eval(self, batch, batch_idx):
         # prepare decode
-        images, labels, image_padding_mask, lengths = batch
+        images, labels, image_padding_mask, lengths, paths = batch
 
         # decode
         pred, pred_len, _ = self.decode(images,
@@ -226,6 +228,9 @@ class ModelCE(pl.LightningModule):
 
         cer_distances, num_chars = compute_cer(predicts, groundtruth, indistinguish=False)
         wer_distances, num_words = compute_wer(predicts, groundtruth, indistinguish=False)
+
+        for (path, wer_distance) in zip(paths, wer_distances):
+            self.log.write(f'{path} | {wer_distance.item()}\n')
 
         return {'cer_distances': cer_distances,
                 'num_chars': num_chars,
@@ -250,6 +255,9 @@ class ModelCE(pl.LightningModule):
             'progress_bar': {'CER': CER, 'WER': WER},
             'log': {f'{tag}/CER': CER, f'{tag}/WER': WER, 'step': self.current_epoch},
         }
+
+        self.log.write(str(results['log']))
+
         return results
 
     #########################
@@ -259,10 +267,10 @@ class ModelCE(pl.LightningModule):
     def collate_fn(self, batch):
         batch_size = len(batch)
         batch.sort(key=lambda sample: len(sample[1]), reverse=True)
-        image_samples, label_samples = list(zip(*batch))
+        image_samples, label_samples, paths = list(zip(*batch))
         images, image_padding_mask = collate_images(image_samples, torch.tensor([0]), None)
         labels, lengths = collate_text(label_samples, 0, None)
-        return images, labels, image_padding_mask, lengths
+        return images, labels, image_padding_mask, lengths, paths
 
     def train_dataloader(self):
         train_loader = DataLoader(
